@@ -1,0 +1,654 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Battle Frontier - Gen 3</title>
+    <script src="Scripts/jquery-2.1.0.min.js"></script>
+    <script src="Scripts/move_data.js"></script>
+    <script src="Scripts/pokedex.js"></script>
+    <script src="Scripts/type_data.js"></script>
+    <script src="Scripts/stat_data.js"></script>
+    <script src="Scripts/nature_data.js"></script>
+    <script src="Scripts/item_data.js"></script>
+    <script src="Scripts/damage_gen3.js"></script>
+    <script src="Scripts/setdex_gen3_sets.js"></script>
+    <script src="Scripts/factory.js"></script>
+    <script type="module">
+        // import the ES module that exports SPECIES_NATIONAL and expose it as a global
+        import { SPECIES_NATIONAL } from './PokémonNationalDexNr.js';
+        window.SPECIES_NATIONAL = SPECIES_NATIONAL;
+    </script>
+</head>
+<body>
+    <style>
+        :root {
+            --bg: #f4efe6;
+            --ink: #1e1a16;
+            --accent: #d26a2f;
+            --accent-2: #2a7f62;
+            --paper: #fff8ee;
+            --muted: #6d5c4b;
+            --ohko-you: #c6eabc;
+            --ohko-them: #f5b8b1;
+            --neutral: #ffffff;
+            --border: #d9c9b8;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 13px;
+            color: var(--ink);
+            background: var(--bg);
+        }
+        header {
+            padding: 12px 16px;
+            background: linear-gradient(90deg, #1a6b3c 0%, #228b4a 30%, #2ea55e 60%, #3cc76e 100%);
+            border-bottom: 2px solid #145a30;
+            color: #fff;
+        }
+        header h1 { margin: 0; font-size: 18px; font-weight: 700; }
+
+        /* ---- Setup panel ---- */
+        .setup-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 10px 16px;
+            background: var(--paper);
+            border-bottom: 1px solid var(--border);
+            align-items: flex-end;
+        }
+        .setup-bar label { display: flex; flex-direction: column; font-size: 11px; color: var(--muted); }
+        .setup-bar input, .setup-bar select { font-family: inherit; font-size: 13px; padding: 3px 5px; border: 1px solid var(--border); border-radius: 4px; background: #fff; }
+        .setup-bar select { max-width: 155px; }
+        .setup-bar input[type="number"] { width: 52px; }
+        .setup-bar .ev-group { display: flex; gap: 4px; }
+        .setup-bar .ev-group label { min-width: 38px; }
+        .setup-bar button {
+            padding: 5px 14px;
+            border: 0; border-radius: 6px;
+            color: #fff;
+            background: linear-gradient(90deg, var(--accent), #f39d5a);
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 13px;
+        }
+        .statbox {
+            font-size: 12px;
+            background: #f3eadf;
+            border: 1px dashed var(--border);
+            padding: 6px 10px;
+            border-radius: 6px;
+            white-space: pre-wrap;
+            margin: 6px 16px;
+        }
+        /* ---- Filter bar ---- */
+        .filter-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            padding: 8px 16px;
+            background: #fffdf9;
+            border-bottom: 1px solid var(--border);
+            align-items: center;
+            font-size: 12px;
+        }
+        .filter-bar label { display: flex; align-items: center; gap: 4px; color: var(--muted); }
+        .filter-bar select, .filter-bar input { font-family: inherit; font-size: 12px; padding: 2px 5px; border: 1px solid var(--border); border-radius: 4px; background: #fff; }
+        .filter-bar input[type="number"] { width: 55px; }
+        .filter-bar input[type="text"] { width: 110px; }
+        #status { color: var(--accent); font-weight: 600; margin-left: auto; }
+
+        /* ---- Spreadsheet table ---- */
+        .table-wrap {
+            overflow: auto;
+            padding: 0 16px 20px 16px;
+        }
+        #results {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+        #results th {
+            position: sticky;
+            top: 0;
+            background: #eee5d8;
+            border: 1px solid var(--border);
+            padding: 3px 4px;
+            text-align: left;
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+            font-size: 10px;
+            color: var(--muted);
+        }
+        #results th:hover { background: #e0d4c3; }
+        #results th .arrow { font-size: 8px; margin-left: 1px; }
+        #results td {
+            border: 1px solid var(--border);
+            padding: 2px 3px;
+            white-space: nowrap;
+            vertical-align: middle;
+            font-size: 11px;
+        }
+        /* make the first column a fixed square for sprites */
+        #results td:first-child, #results th[data-col="species"] {
+            width: 44px;
+            text-align: center;
+            padding: 6px;
+        }
+        #results td img.sprite {
+            width: 32px;
+            height: 32px;
+            object-fit: contain;
+            display: block;
+            margin: 0 auto;
+            image-rendering: auto;
+        }
+        /* EV grid (six small stat boxes) */
+        .ev-grid { display:flex; gap:2px; align-items:stretch; }
+        .ev-cell { min-width:24px; padding:2px 3px; border-radius:3px; text-align:center; font-size:10px; background:transparent; border:1px solid transparent; }
+        .ev-cell span.label { display:block; font-size:9px; color:var(--muted); }
+        /* per-cell OHKO coloring */
+        .dmg-you.ohko { background: var(--ohko-you); }
+        .dmg-them.ohko { background: var(--ohko-them); }
+        #results tr:hover td { filter: brightness(0.96); }
+        /* move label tiles colored by type */
+        .move-label { display:inline-block; padding:1px 3px; border-radius:3px; margin:1px 1px; font-size:10px; color:#000; }
+        /* team card styles */
+        #teamContainer { padding: 6px 16px; background: var(--paper); border-bottom: 1px solid var(--border); }
+        .team-card {
+            display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end;
+            padding: 6px 8px; margin-bottom: 4px;
+            background: #fff; border: 1px solid var(--border); border-radius: 6px;
+        }
+        .team-card label { display: flex; flex-direction: column; font-size: 10px; color: var(--muted); }
+        .team-card input, .team-card select { font-family: inherit; font-size: 12px; padding: 2px 4px; border: 1px solid var(--border); border-radius: 4px; background: #fff; }
+        .team-card select { max-width: 140px; }
+        .team-card input[type="number"] { width: 46px; }
+        .team-card .ev-group { display: flex; gap: 3px; }
+        .team-card .ev-group label { min-width: 32px; }
+        .team-card .card-num { font-weight: 700; font-size: 13px; color: var(--accent); margin-right: 4px; align-self: center; }
+        .remove-btn { border:0; background:transparent; color:#c44; font-size:16px; cursor:pointer; align-self:center; padding:2px 6px; }
+        .remove-btn:hover { color:#a00; }
+        .team-actions { padding: 6px 16px; background: var(--paper); border-bottom: 1px solid var(--border); display:flex; gap:10px; align-items:center; }
+        .add-btn { border:0; background:var(--accent-2); color:#fff; font-size:18px; font-weight:700; width:32px; height:32px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+        .add-btn:hover { filter:brightness(1.1); }
+        /* compact combined cells for member matchups */
+        .matchup-cell { display:flex; flex-direction:column; gap:1px; }
+        .matchup-cell .mc-move { font-size:10px; }
+        .matchup-cell .mc-dmg { font-size:11px; font-weight:600; }
+        .matchup-cell .mc-spd { font-size:9px; font-weight:700; padding:1px 3px; border-radius:3px; display:inline-block; }
+        .mc-spd.fast { background:#c6eabc; color:#1a6b3c; }
+        .mc-spd.slow { background:#f5b8b1; color:#a33; }
+        /* boost controls */
+        .boost-group { display:flex; gap:2px; align-items:flex-end; margin-left:2px; }
+        .boost-group label { display:flex; flex-direction:column; font-size:9px; color:var(--muted); align-items:center; min-width:28px; }
+        .boost-group select { width:34px; font-size:10px; padding:1px; border:1px solid var(--border); border-radius:3px; text-align:center; }
+        .type-fire{background:#ffb3b3}
+        .type-water{background:#b3d8ff}
+        .type-grass{background:#c8f0c8}
+        .type-electric{background:#fff6b3}
+        .type-rock{background:#d9c7b3}
+        .type-ground{background:#f0d6b3}
+        .type-psychic{background:#f2c8ff}
+        .type-ghost{background:#d6c8ff}
+        .type-dark{background:#d0c6c0}
+        .type-ice{background:#dff0ff}
+        .type-dragon{background:#c7d7ff}
+        .type-normal{background:#e8e8e8}
+        .type-steel{background:#d6dbe0}
+        .type-flying{background:#e6f0ff}
+        .type-bug{background:#e6f7d6}
+        .type-poison{background:#e9d6ff}
+        .type-fighting{background:#ffd6c0}
+        /* item sprite next to item name */
+        .item-sprite {
+            width: 20px;
+            height: 20px;
+            object-fit: contain;
+            vertical-align: middle;
+            margin-right: 3px;
+            image-rendering: auto;
+        }
+    </style>
+
+    <header>
+        <h1>Battle Frontier Team Builder - Emerald</h1>
+    </header>
+
+    <div id="teamContainer"></div>
+    <div class="team-actions">
+        <button class="add-btn" id="addMember">+</button>
+        <button id="calc" style="padding:5px 14px;border:0;border-radius:6px;color:#fff;background:linear-gradient(90deg,var(--accent),#f39d5a);cursor:pointer;font-weight:700;font-size:13px;">Calculate</button>
+    </div>
+    <div id="computed" class="statbox" style="display:none"></div>
+
+    <div class="filter-bar">
+        <label>Pool:
+            <select id="poolFilter">
+                <option value="group1">Group 1</option>
+                <option value="group2">Group 2</option>
+                <option value="group3" selected>Group 3</option>
+                <option value="all">All</option>
+            </select>
+        </label>
+        <label>Sort:
+            <select id="matchupSort">
+                <option value="worst">Worst first</option>
+                <option value="best">Best first</option>
+                <option value="name">Name A-Z</option>
+            </select>
+        </label>
+        <label>Show:
+            <select id="matchupFilter">
+                <option value="all">All</option>
+                <option value="best50">Best 50</option>
+                <option value="worst50">Worst 50</option>
+            </select>
+        </label>
+        <label>Limit: <input id="setLimit" type="number" value="2000"></label>
+        <label>Opp Level: <input id="oppLevel" type="number" value="50" min="1" style="width:70px"></label>
+        <label style="display:flex;align-items:center;gap:6px"><input id="oppAuto" type="checkbox" checked>Auto (use your level if &gt;50)</label>
+        <label>Search: <input id="nameFilter" type="text" placeholder="e.g. Tyranitar"></label>
+        <span id="status"></span>
+    </div>
+
+    <div class="table-wrap">
+        <table id="results">
+            <thead><tr></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+    <script>
+        /* ==== cached option HTML (built once at init) ==== */
+        var __speciesOpts = '', __moveOpts = '', __natureOpts = '';
+
+        /* ==== helpers ==== */
+        function formatEvs(evs) {
+            if (!evs) return '';
+            var lbl = {hp:'HP',at:'At',df:'Df',sa:'Sa',sd:'Sd',sp:'Sp'};
+            var parts = [];
+            ['hp','at','df','sa','sd','sp'].forEach(function(k) { if (evs[k]) parts.push(evs[k]+' '+lbl[k]); });
+            return parts.length ? parts.join('/') : '0';
+        }
+        /* ==== item sprite path helper ==== */
+        function getItemSpritePath(itemName) {
+            if (!itemName) return null;
+            var name = itemName.trim();
+            // Special case: file uses a space instead of hyphen
+            var special = { 'Lax Incense': 'lax incense' };
+            if (special[name]) return 'Sprites/Items/' + special[name] + '.png';
+            // Berry items: strip " Berry", lowercase
+            if (name.indexOf(' Berry') === name.length - 6 && name.length > 6) {
+                return 'Sprites/Items/' + name.replace(' Berry', '').toLowerCase() + '.png';
+            }
+            // General: lowercase, remove apostrophes, replace spaces with hyphens
+            return 'Sprites/Items/' + name.toLowerCase().replace(/'/g, '').replace(/\s+/g, '-') + '.png';
+        }
+
+        function renderMoveLabel(moveName) {
+            if (!moveName) return $('<span>').text('-');
+            var mvGlobal = (typeof moves !== 'undefined') ? moves : (typeof MOVES_ADV !== 'undefined' ? MOVES_ADV : {});
+            var type = (mvGlobal[moveName] && mvGlobal[moveName].type) ? mvGlobal[moveName].type.toLowerCase() : 'normal';
+            return $('<span>').addClass('move-label type-' + type.replace(/[^a-z0-9]+/g,'')).text(moveName);
+        }
+        function renderEvs(evs) {
+            var order = ['hp','at','df','sa','sd','sp'];
+            var labels = {hp:'HP',at:'At',df:'Df',sa:'SpA',sd:'SpD',sp:'Spd'};
+            var td = $('<td>');
+            var grid = $('<div>').addClass('ev-grid');
+            order.forEach(function(k){
+                var v = (evs && evs[k]) ? evs[k] : '-';
+                var cell = $('<div>').addClass('ev-cell');
+                cell.append($('<span>').addClass('value').text(v));
+                cell.append($('<span>').addClass('label').text(labels[k]));
+                grid.append(cell);
+            });
+            td.append(grid);
+            return td;
+        }
+
+        /* ==== national dex sprite helpers ==== */
+        function normalizeNameForKey(s) { return (s||'').toString().toLowerCase().replace(/[^a-z0-9]+/g,''); }
+        function pad4(n) { return (''+n).padStart(4, '0'); }
+        function buildNationalMap() {
+            if (window.__nationalMap) return window.__nationalMap;
+            var map = {};
+            var arr = (typeof SPECIES_NATIONAL !== 'undefined') ? SPECIES_NATIONAL : (typeof window.SPECIES_NATIONAL !== 'undefined' ? window.SPECIES_NATIONAL : null);
+            if (arr && Array.isArray(arr)) arr.forEach(function(p){ if (p && p.length>=2) map[normalizeNameForKey(p[1])] = p[0]; });
+            window.__nationalMap = map;
+            return map;
+        }
+        function getNationalNumber(species) { var m = buildNationalMap(); return m[normalizeNameForKey(species)] || null; }
+
+        /* ==== team card management ==== */
+        function createTeamCard(idx) {
+            var card = $('<div>').addClass('team-card').attr('data-idx', idx);
+            card.append($('<span>').addClass('card-num').text('#' + (idx+1)));
+            var sp = $('<select>').addClass('tc-species').html(__speciesOpts);
+            card.append($('<label>').text('Species ').append(sp));
+            card.append($('<label>').text('Lvl ').append($('<input>').addClass('tc-level').attr('type','number').val(50)));
+            card.append($('<label>').text('Nature ').append($('<select>').addClass('tc-nature').html(__natureOpts)));
+            card.append($('<label>').text('Item ').append($('<input>').addClass('tc-item').val('').css('width','90px')));
+            card.append($('<label>').text('Ability ').append($('<input>').addClass('tc-ability').val('').css('width','80px')));
+            var evg = $('<div>').addClass('ev-group');
+            ['HP','At','Df','Sa','Sd','Sp'].forEach(function(s){
+                evg.append($('<label>').text(s).append($('<input>').addClass('tc-ev-'+s.toLowerCase()).attr('type','number').val(0)));
+            });
+            card.append(evg);
+            card.append($('<label>').text('IVs ').append($('<input>').addClass('tc-iv').attr('type','number').val(31)));
+            // stat boost selectors (stages -6 to +6)
+            var boostGroup = $('<div>').addClass('boost-group');
+            var boostOpts = '';
+            for (var b = -6; b <= 6; b++) { boostOpts += '<option value="'+b+'"'+(b===0?' selected':'')+'>'+( b>0?'+':'')+b+'</option>'; }
+            ['At','Df','Sa','Sd','Sp'].forEach(function(s){
+                boostGroup.append($('<label>').text(s).append($('<select>').addClass('tc-boost-'+s.toLowerCase()).html(boostOpts)));
+            });
+            card.append(boostGroup);
+            for (var i = 1; i <= 4; i++) {
+                card.append($('<label>').text('M'+i+' ').append($('<select>').addClass('tc-move tc-move'+i).html(__moveOpts).css('width','120px')));
+            }
+            if (idx > 0) {
+                card.append($('<button>').addClass('remove-btn').text('\u2715').click(function(){ card.remove(); renumberCards(); }));
+            }
+            return card;
+        }
+        function renumberCards() {
+            $('#teamContainer .team-card').each(function(i) {
+                $(this).attr('data-idx', i).find('.card-num').text('#' + (i+1));
+                if (i === 0) $(this).find('.remove-btn').hide(); else $(this).find('.remove-btn').show();
+            });
+        }
+
+        /* ==== build team from form ==== */
+        function buildTeamFromForm() {
+            var team = [];
+            $('#teamContainer .team-card').each(function(){
+                var $c = $(this);
+                var sp = $c.find('.tc-species').val();
+                if (!sp) return;
+                var lv = parseInt($c.find('.tc-level').val()) || 50;
+                var nat = $c.find('.tc-nature').val();
+                var item = $c.find('.tc-item').val();
+                var ability = $c.find('.tc-ability').val();
+                var ivAll = parseInt($c.find('.tc-iv').val()) || 31;
+                var evs = {};
+                ['hp','at','df','sa','sd','sp'].forEach(function(k){ evs[k] = parseInt($c.find('.tc-ev-'+k).val()) || 0; });
+                var ivs = {hp:ivAll,at:ivAll,df:ivAll,sa:ivAll,sd:ivAll,sp:ivAll};
+                var boosts = {};
+                ['at','df','sa','sd','sp'].forEach(function(k){ boosts[k] = parseInt($c.find('.tc-boost-'+k).val()) || 0; });
+                var mvs = [];
+                for (var i = 1; i <= 4; i++) { var v = $c.find('.tc-move'+i).val(); if (v) mvs.push(v); }
+                team.push({species:sp, level:lv, nature:nat, item:item, ability:ability, evs:evs, ivs:ivs, moves:mvs, boosts:boosts});
+            });
+            return team;
+        }
+
+        /* ==== pool / name filters ==== */
+        function applyPoolFilter(list) {
+            var pool = $('#poolFilter').val();
+            if (!pool || pool === 'all') return list;
+            var groups = {
+                'group1': (typeof GROUP1 !== 'undefined') ? GROUP1 : null,
+                'group2': (typeof GROUP2 !== 'undefined') ? GROUP2 : null,
+                'group3': (typeof GROUP3 !== 'undefined') ? GROUP3 : null
+            };
+            var arr = groups[pool];
+            if (arr && Array.isArray(arr)) {
+                var s = {}; arr.forEach(function(n){ s[n] = true; });
+                return list.filter(function(r){ return s[r.species]; });
+            }
+            return list;
+        }
+        function applyNameFilter(list) {
+            var q = $('#nameFilter').val().toLowerCase().trim();
+            if (!q) return list;
+            return list.filter(function(r){ return (r.species+' '+r.setName).toLowerCase().indexOf(q) !== -1; });
+        }
+
+        /* ==== sorting ==== */
+        var currentSortCol = 'score', currentSortDir = 'desc';
+        function sortList(list, col, dir) {
+            return list.slice().sort(function(a,b){
+                var va, vb;
+                switch(col) {
+                    case 'species': va=a.species; vb=b.species; break;
+                    case 'set': va=a.setName; vb=b.setName; break;
+                    case 'item': va=a.set.item||''; vb=b.set.item||''; break;
+                    case 'nature': va=a.set.nature||''; vb=b.set.nature||''; break;
+                    default:
+                        // check for p<n>atk / p<n>def columns
+                        var pm = col.match(/^p(\d+)(atk|def)$/);
+                        if (pm) {
+                            var mi = parseInt(pm[1])-1;
+                            if (pm[2]==='atk') { va=(a.members[mi]?a.members[mi].attackerBestMax:0); vb=(b.members[mi]?b.members[mi].attackerBestMax:0); }
+                            else { va=(a.members[mi]?a.members[mi].defenderBestMax:0); vb=(b.members[mi]?b.members[mi].defenderBestMax:0); }
+                            return dir==='asc'? va-vb : vb-va;
+                        }
+                        va=a.score; vb=b.score; return dir==='asc'? va-vb : vb-va;
+                }
+                var cmp = String(va).localeCompare(String(vb));
+                return dir === 'asc' ? cmp : -cmp;
+            });
+        }
+
+        /* ==== build table headers ==== */
+        function buildHeaders(teamSize) {
+            var tr = $('#results thead tr');
+            tr.empty();
+            function th(col, txt) { return $('<th>').attr('data-col',col).html(txt+'<span class="arrow"></span>'); }
+            tr.append(th('species',''));
+            tr.append(th('set','Set'));
+            tr.append(th('item','Item'));
+            tr.append(th('nature','Nat'));
+            tr.append(th('evs','EVs'));
+            tr.append($('<th>').text('Moves'));
+            for (var i = 0; i < teamSize; i++) {
+                var lbl = '#' + (i+1);
+                // try to get species name for label
+                var $card = $('#teamContainer .team-card').eq(i);
+                if ($card.length) {
+                    var sn = $card.find('.tc-species').val();
+                    if (sn) {
+                        var nat = getNationalNumber(sn);
+                        if (nat) lbl = '<img src="Sprites/' + pad4(nat) + '.png" style="width:20px;height:20px;vertical-align:middle" alt="' + sn + '">';
+                        else lbl = sn.substring(0,6);
+                    }
+                }
+                tr.append(th('p'+(i+1)+'atk', lbl + '\u2192'));
+                tr.append(th('p'+(i+1)+'def', '\u2192' + lbl));
+            }
+            // re-bind header clicks
+            tr.find('th[data-col]').off('click').on('click', function(){
+                var col = $(this).data('col');
+                if (!col) return;
+                if (currentSortCol === col) currentSortDir = currentSortDir==='asc'?'desc':'asc';
+                else { currentSortCol = col; currentSortDir = 'asc'; }
+                renderResults(window.__lastResults || []);
+            });
+        }
+
+        /* ==== render results ==== */
+        function renderResults(list) {
+            var tbody = $('#results tbody');
+            tbody.empty();
+            var teamSize = window.__teamSize || 1;
+            buildHeaders(teamSize);
+
+            var filtered = applyPoolFilter(list);
+            filtered = applyNameFilter(filtered);
+
+            var sortMode = $('#matchupSort').val();
+            if (currentSortCol === 'score') {
+                if (sortMode === 'worst') currentSortDir = 'desc';
+                else if (sortMode === 'best') currentSortDir = 'asc';
+                else if (sortMode === 'name') { currentSortCol = 'species'; currentSortDir = 'asc'; }
+            }
+            filtered = sortList(filtered, currentSortCol, currentSortDir);
+
+            var mf = $('#matchupFilter').val();
+            if (mf === 'best50') filtered = filtered.slice(-50).reverse();
+            else if (mf === 'worst50') filtered = filtered.slice(0, 50);
+
+            // update arrows
+            $('#results th').each(function(){
+                var col = $(this).data('col');
+                var arrow = $(this).find('.arrow');
+                if (col === currentSortCol) arrow.text(currentSortDir==='asc'?' \u25B2':' \u25BC');
+                else arrow.text('');
+            });
+
+            filtered.forEach(function(r) {
+                var tr = $('<tr>');
+                // sprite
+                (function(){
+                    var nat = getNationalNumber(r.species);
+                    if (nat) {
+                        var img = $('<img>').addClass('sprite').attr('src','Sprites/'+pad4(nat)+'.png').attr('alt',r.species)
+                            .on('error',function(){ $(this).replaceWith($('<span>').text(r.species)); });
+                        tr.append($('<td>').append(img));
+                    } else tr.append($('<td>').text(r.species));
+                })();
+                tr.append($('<td>').text(r.setName));
+                // item cell with sprite
+                (function(){
+                    var itemTd = $('<td>');
+                    var itemName = r.set.item || '';
+                    if (itemName) {
+                        var spritePath = getItemSpritePath(itemName);
+                        if (spritePath) {
+                            var itemImg = $('<img>').addClass('item-sprite')
+                                .attr('src', spritePath).attr('alt', itemName)
+                                .on('error', function(){ $(this).hide(); });
+                            itemTd.append(itemImg);
+                        }
+                    }
+                    itemTd.append($('<span>').text(itemName));
+                    tr.append(itemTd);
+                })();
+                tr.append($('<td>').text(r.set.nature||''));
+                tr.append(renderEvs(r.set.evs));
+                // opponent moves
+                var movesTd = $('<td>');
+                (r.set.moves||[]).forEach(function(m){ movesTd.append(renderMoveLabel(m)); });
+                tr.append(movesTd);
+
+                // per-member columns
+                for (var mi = 0; mi < teamSize; mi++) {
+                    var m = r.members && r.members[mi] ? r.members[mi] : null;
+                    if (!m) { tr.append($('<td>').text('-')); tr.append($('<td>').text('-')); continue; }
+                    // "member → set" cell
+                    var atkTd = $('<td>').addClass('dmg-you');
+                    var atkWrap = $('<div>').addClass('matchup-cell');
+                    atkWrap.append($('<span>').addClass('mc-move').append(renderMoveLabel(m.attackerBestMove)));
+                    atkWrap.append($('<span>').addClass('mc-dmg').text(m.attackerBestMin + '-' + m.attackerBestMax + '%'));
+                    var spdSpan = $('<span>').addClass('mc-spd');
+                    if (m.outspeeds) spdSpan.addClass('fast').text('\u25B2 FAST');
+                    else spdSpan.addClass('slow').text('\u25BC SLOW');
+                    atkWrap.append(spdSpan);
+                    atkTd.append(atkWrap);
+                    if (m.attackerBestMin >= 100) atkTd.addClass('ohko');
+                    tr.append(atkTd);
+                    // "set → member" cell
+                    var defTd = $('<td>').addClass('dmg-them');
+                    var defWrap = $('<div>').addClass('matchup-cell');
+                    defWrap.append($('<span>').addClass('mc-move').append(renderMoveLabel(m.defenderBestMove)));
+                    defWrap.append($('<span>').addClass('mc-dmg').text(m.defenderBestMin + '-' + m.defenderBestMax + '%'));
+                    defTd.append(defWrap);
+                    if (m.defenderBestMin >= 100) defTd.addClass('ohko');
+                    tr.append(defTd);
+                }
+                tbody.append(tr);
+            });
+            $('#status').text(filtered.length + ' sets shown');
+        }
+
+        /* ==== init ==== */
+        $(function(){
+            window.gameId = 3;
+            if (typeof setGenProperties === 'function') setGenProperties();
+
+            // cache dropdown option HTML
+            var pdx = (typeof pokedex !== 'undefined') ? pokedex : (typeof POKEDEX_ADV !== 'undefined' ? POKEDEX_ADV : {});
+            __speciesOpts = Object.keys(pdx).sort().map(function(s){ return '<option value="'+s+'">'+s+'</option>'; }).join('');
+            var mv = (typeof moves !== 'undefined') ? moves : (typeof MOVES_ADV !== 'undefined' ? MOVES_ADV : {});
+            __moveOpts = '<option value="">(No Move)</option>' + Object.keys(mv).sort().map(function(m){ return '<option value="'+m+'">'+m+'</option>'; }).join('');
+            __natureOpts = Object.keys(NATURES).map(function(n){ return '<option value="'+n+'">'+n+'</option>'; }).join('');
+
+            // create first team card
+            var card0 = createTeamCard(0);
+            $('#teamContainer').append(card0);
+            card0.find('.tc-species').val('Pikachu');
+            card0.find('.tc-nature').val('Timid');
+            card0.find('.tc-item').val('Light Ball');
+            card0.find('.tc-ev-sa').val(252);
+            card0.find('.tc-ev-sp').val(252);
+            card0.find('.tc-move1').val('Thunderbolt');
+            card0.find('.tc-move2').val('Quick Attack');
+
+            // + button
+            $('#addMember').click(function(){
+                var count = $('#teamContainer .team-card').length;
+                if (count >= 6) return; // max 6
+                var newCard = createTeamCard(count);
+                $('#teamContainer').append(newCard);
+                renumberCards();
+            });
+
+            // toggle oppLevel
+            $('#oppAuto').change(function(){ $('#oppLevel').prop('disabled', $(this).is(':checked')); });
+            $('#oppLevel').prop('disabled', $('#oppAuto').is(':checked'));
+
+            // calculate
+            $('#calc').click(function(){
+                var status = $('#status');
+                status.text('Calculating...');
+                try {
+                    var teamInputs = buildTeamFromForm();
+                    if (!teamInputs.length) { status.text('Add at least one Pokemon'); return; }
+                    var limit = parseInt($('#setLimit').val()) || 2000;
+                    // determine opp level
+                    var maxLevel = Math.max.apply(null, teamInputs.map(function(t){ return t.level||50; }));
+                    var oppLevel;
+                    if ($('#oppAuto').is(':checked')) oppLevel = Math.max(50, maxLevel);
+                    else oppLevel = parseInt($('#oppLevel').val()) || 50;
+
+                    // build team for display
+                    var builtTeam = teamInputs.map(function(t){
+                        var p = buildPoke(t);
+                        if (t.boosts) { ['at','df','sa','sd','sp'].forEach(function(k){ p.boosts[k] = t.boosts[k] || 0; }); }
+                        return p;
+                    });
+                    window.__team = builtTeam;
+                    window.__teamSize = builtTeam.length;
+
+                    var list = evaluateAllSetsTeam(builtTeam, {limit: limit, opponentLevel: oppLevel});
+                    window.__lastResults = list;
+                    currentSortCol = 'score';
+                    currentSortDir = 'desc';
+                    renderResults(list);
+                } catch(e) {
+                    status.text('Error: ' + e.message);
+                    console.error(e);
+                }
+            });
+
+            // re-render on filter/sort changes
+            $('#poolFilter,#matchupSort,#matchupFilter,#nameFilter,#oppAuto,#oppLevel').on('change input', function(){
+                if (this.id === 'matchupSort') {
+                    var v = $(this).val();
+                    if (v === 'name') { currentSortCol = 'species'; currentSortDir = 'asc'; }
+                    else { currentSortCol = 'score'; currentSortDir = v==='best'?'asc':'desc'; }
+                }
+                renderResults(window.__lastResults || []);
+            });
+
+            // initial calc
+            window.__teamSize = 1;
+            $('#calc').click();
+        });
+    </script>
+</body>
+</html>
