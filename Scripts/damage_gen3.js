@@ -198,12 +198,15 @@ function getDamageResultADV(attacker, defender, move, field) {
 	if (defender.ability === "Thick Fat" && (moveType === "Fire" || moveType === "Ice")) {
 		at = Math.floor(at / 2);
 		description.defenderAbility = defender.ability;
-	} else if (isPhysical && defender.ability === "Marvel Scale" && (defender.status !== "Healthy" || defender.isAbilityActivated)) {
+	} else if (isPhysical && defender.ability === "Marvel Scale" && defender.status && defender.status !== "Healthy") {
 		df = Math.floor(df * 1.5);
 		description.defenderAbility = defender.ability;
 	}
 
-	if (isPhysical && (attacker.ability === "Hustle" || (attacker.ability === "Guts" && (attacker.status !== "Healthy" || attacker.isAbilityActivated)))) {
+	if (isPhysical && attacker.ability === "Hustle") {
+		at = Math.floor(at * 1.5);
+		description.attackerAbility = attacker.ability;
+	} else if (isPhysical && attacker.ability === "Guts" && attacker.status && attacker.status !== "Healthy") {
 		at = Math.floor(at * 1.5);
 		description.attackerAbility = attacker.ability;
 	} else if (!isPhysical && (attacker.ability === "Plus" || attacker.ability === "Minus") && attacker.isAbilityActivated) {

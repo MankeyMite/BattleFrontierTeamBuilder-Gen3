@@ -12,6 +12,8 @@
     <script src="Scripts/item_data.js"></script>
     <script src="Scripts/damage_gen3.js"></script>
     <script src="Scripts/setdex_gen3_sets.js"></script>
+    <script src="Scripts/ability_descriptions.js"></script>
+    <script src="Scripts/learnsets.js"></script>
     <script src="Scripts/factory.js"></script>
     <script type="module">
         // import the ES module that exports SPECIES_NATIONAL and expose it as a global
@@ -30,6 +32,8 @@
             --muted: #6d5c4b;
             --ohko-you: #c6eabc;
             --ohko-them: #f5b8b1;
+            --maybe-ohko-you: #e9f6e9;
+            --maybe-ohko-them: #fde7e5;
             --neutral: #ffffff;
             --border: #d9c9b8;
         }
@@ -153,9 +157,34 @@
         /* per-cell OHKO coloring */
         .dmg-you.ohko { background: var(--ohko-you); }
         .dmg-them.ohko { background: var(--ohko-them); }
+        /* possible (but not guaranteed) OHKO */
+        .dmg-you.maybe-ohko { background: var(--maybe-ohko-you); }
+        .dmg-them.maybe-ohko { background: var(--maybe-ohko-them); }
         #results tr:hover td { filter: brightness(0.96); }
         /* move label tiles colored by type */
-        .move-label { display:inline-block; padding:1px 3px; border-radius:3px; margin:1px 1px; font-size:10px; color:#000; }
+        .move-label { display:inline-block; padding:1px 3px; border-radius:3px; margin:1px 1px; font-size:10px; color:#000; cursor:pointer; }
+        /* ability label styles */
+        .ability-label { display:inline-block; padding:1px 4px; border-radius:3px; font-size:10px; color:var(--ink); background:#eee5d8; cursor:default; position:relative; }
+        .ability-label.clickable { cursor:pointer; }
+        .ability-label.clickable:hover { outline:2px solid var(--accent); }
+        .ability-label.ability-active { background:var(--accent); color:#fff; font-weight:600; }
+        .ability-label.ability-inactive { opacity:0.5; }
+        .ability-sep { font-size:10px; color:var(--muted); margin:0 1px; }
+        /* ability tooltip */
+        .ability-tip { position:absolute; bottom:100%; left:50%; transform:translateX(-50%); background:#333; color:#fff; font-size:11px; padding:4px 8px; border-radius:4px; white-space:nowrap; z-index:100; pointer-events:none; margin-bottom:4px; display:none; }
+        .ability-label:hover .ability-tip { display:block; }
+        .move-label:hover { outline:2px solid var(--accent); }
+        .move-label.filter-active { outline:2px solid var(--accent); box-shadow:0 0 4px var(--accent); }
+        /* clickable item & nature cells */
+        td.clickable-item, td.clickable-nature { cursor:pointer; }
+        td.clickable-item:hover, td.clickable-nature:hover { outline:2px solid var(--accent); outline-offset:-2px; }
+        td.clickable-item.filter-active, td.clickable-nature.filter-active { outline:2px solid var(--accent); outline-offset:-2px; box-shadow:inset 0 0 4px rgba(210,106,47,0.25); }
+        /* active-filter indicator bar */
+        #activeFilters { display:none; flex-wrap:wrap; gap:6px; padding:6px 16px; background:#fff3e6; border-bottom:1px solid var(--border); font-size:12px; align-items:center; }
+        #activeFilters.visible { display:flex; }
+        .af-tag { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:12px; background:var(--accent); color:#fff; font-weight:600; font-size:11px; cursor:pointer; }
+        .af-tag:hover { filter:brightness(0.85); }
+        .af-tag .af-x { font-weight:700; margin-left:2px; }
         /* team card styles */
         #teamContainer { padding: 6px 16px; background: var(--paper); border-bottom: 1px solid var(--border); }
         .team-card {
@@ -169,6 +198,10 @@
         .team-card input[type="number"] { width: 46px; }
         .team-card .ev-group { display: flex; gap: 3px; }
         .team-card .ev-group label { min-width: 32px; }
+        .tc-species-wrap { display:flex; align-items:center; gap:8px; }
+        .tc-sprite { width:20px; height:20px; object-fit:contain; display:block; image-rendering: auto; }
+        /* ensure the species select lines up with other inputs */
+        .tc-species-wrap select { height:22px; box-sizing:border-box; }
         .team-card .card-num { font-weight: 700; font-size: 13px; color: var(--accent); margin-right: 4px; align-self: center; }
         .remove-btn { border:0; background:transparent; color:#c44; font-size:16px; cursor:pointer; align-self:center; padding:2px 6px; }
         .remove-btn:hover { color:#a00; }
@@ -234,26 +267,26 @@
                 <option value="all">All</option>
             </select>
         </label>
-        <label>Sort:
-            <select id="matchupSort">
-                <option value="worst">Worst first</option>
-                <option value="best">Best first</option>
-                <option value="name">Name A-Z</option>
+        <label>Weather:
+            <select id="weatherSelect">
+                <option value="">(None)</option>
+                <option value="Sun">Sun</option>
+                <option value="Rain">Rain</option>
+                <option value="Sand">Sand</option>
+                <option value="Hail">Hail</option>
             </select>
         </label>
-        <label>Show:
-            <select id="matchupFilter">
-                <option value="all">All</option>
-                <option value="best50">Best 50</option>
-                <option value="worst50">Worst 50</option>
-            </select>
-        </label>
-        <label>Limit: <input id="setLimit" type="number" value="2000"></label>
+        <label style="display:flex;align-items:center;gap:4px"><input id="teamReflect" type="checkbox">Team Reflect</label>
+        <label style="display:flex;align-items:center;gap:4px"><input id="teamLightScreen" type="checkbox">Team L-Screen</label>
+        <label style="display:flex;align-items:center;gap:4px"><input id="oppReflect" type="checkbox">Opp Reflect</label>
+        <label style="display:flex;align-items:center;gap:4px"><input id="oppLightScreen" type="checkbox">Opp L-Screen</label>
+        <!-- Sort and Show controls removed per request -->
         <label>Opp Level: <input id="oppLevel" type="number" value="50" min="1" style="width:70px"></label>
         <label style="display:flex;align-items:center;gap:6px"><input id="oppAuto" type="checkbox" checked>Auto (use your level if &gt;50)</label>
         <label>Search: <input id="nameFilter" type="text" placeholder="e.g. Tyranitar"></label>
         <span id="status"></span>
     </div>
+    <div id="activeFilters"></div>
 
     <div class="table-wrap">
         <table id="results">
@@ -263,7 +296,109 @@
     </div>
     <script>
         /* ==== cached option HTML (built once at init) ==== */
-        var __speciesOpts = '', __moveOpts = '', __natureOpts = '';
+        var __speciesOpts = '', __moveOpts = '', __natureOpts = '', __itemOpts = '';
+
+        /* ==== click-to-filter state ==== */
+        var __clickFilters = { move: null, item: null, nature: null };
+        function toggleClickFilter(type, value) {
+            if (__clickFilters[type] === value) __clickFilters[type] = null;
+            else __clickFilters[type] = value;
+            updateActiveFilterBar();
+            renderResults(window.__lastResults || []);
+        }
+        function clearClickFilter(type) {
+            __clickFilters[type] = null;
+            updateActiveFilterBar();
+            renderResults(window.__lastResults || []);
+        }
+        function updateActiveFilterBar() {
+            var bar = $('#activeFilters').empty();
+            var any = false;
+            var labels = { move: 'Move', item: 'Item', nature: 'Nature' };
+            ['move','item','nature'].forEach(function(k) {
+                if (__clickFilters[k]) {
+                    any = true;
+                    var tag = $('<span>').addClass('af-tag').text(labels[k] + ': ' + __clickFilters[k]);
+                    tag.append($('<span>').addClass('af-x').html('&times;'));
+                    tag.click(function(){ clearClickFilter(k); });
+                    bar.append(tag);
+                }
+            });
+            bar.toggleClass('visible', any);
+        }
+        function applyClickFilters(list) {
+            // partition: matching items first, rest after, preserving relative order
+            var m = __clickFilters.move, it = __clickFilters.item, n = __clickFilters.nature;
+            if (!m && !it && !n) return list;
+            var top = [], rest = [];
+            list.forEach(function(r) {
+                var match = true;
+                if (m && !(r.set.moves || []).some(function(mv){ return mv === m; })) match = false;
+                if (it && (r.set.item || '') !== it) match = false;
+                if (n && (r.set.nature || '') !== n) match = false;
+                if (match) top.push(r); else rest.push(r);
+            });
+            return top.concat(rest);
+        }
+
+        /* ==== recalc a single result row with a chosen ability ==== */
+        function recalcRowWithAbility(r) {
+            var team = window.__team;
+            if (!team || !team.length) return;
+            var oppLevel = 50;
+            if ($('#oppAuto').is(':checked')) {
+                var maxLv = Math.max.apply(null, team.map(function(t){ return t.level||50; }));
+                oppLevel = Math.max(50, maxLv);
+            } else {
+                oppLevel = parseInt($('#oppLevel').val()) || 50;
+            }
+            var defInput = Object.assign({species: r.species, level: oppLevel}, r.set);
+            if (r.__chosenAbility) defInput.ability = r.__chosenAbility;
+            else {
+                var pdx = (typeof pokedex !== 'undefined') ? pokedex : (typeof POKEDEX_ADV !== 'undefined' ? POKEDEX_ADV : {});
+                var e = pdx[r.species];
+                var abils = (e && e.abilities) ? e.abilities : [];
+                if (abils.length === 1) defInput.ability = abils[0];
+                else defInput.ability = ''; // dual, none chosen => no ability
+            }
+            var def = buildPoke(defInput);
+            var fields = buildFieldsFromUI();
+            var members = [];
+            for (var ti = 0; ti < team.length; ti++) {
+                var atk = team[ti];
+                var forward = calcGen3Matchup(atk, def, {field: fields.fieldForward});
+                var reverse = calcGen3Matchup(def, atk, {field: fields.fieldReverse});
+                var atkBestMove = '', atkBestMin = 0, atkBestMax = 0, atkGKO = false;
+                if (forward && Array.isArray(forward.perMove)) {
+                    forward.perMove.forEach(function(m) {
+                        if (m.maxPercent >= atkBestMax) { atkBestMax = m.maxPercent||0; atkBestMin = m.minPercent||0; atkBestMove = m.move; }
+                        if (m.guaranteedKO) atkGKO = true;
+                    });
+                }
+                var defBestMove = '', defBestMin = 0, defBestMax = 0;
+                if (reverse && Array.isArray(reverse.perMove)) {
+                    reverse.perMove.forEach(function(m) {
+                        if (m.maxPercent >= defBestMax) { defBestMax = m.maxPercent; defBestMin = m.minPercent; defBestMove = m.move; }
+                    });
+                }
+                var atkSpeed = atk.rawStats ? atk.rawStats.sp : 0;
+                var defSpeed = def.rawStats ? def.rawStats.sp : 0;
+                if (atk.boosts && atk.boosts.sp) atkSpeed = getModifiedStat(atkSpeed, atk.boosts.sp);
+                if (def.boosts && def.boosts.sp) defSpeed = getModifiedStat(defSpeed, def.boosts.sp);
+                var outspeeds = atkSpeed > defSpeed;
+                var memberScore = defBestMax - atkBestMax + (outspeeds ? -40 : 0) + (atkGKO ? -200 : 0);
+                members.push({
+                    attackerBestMove: atkBestMove, attackerBestMin: atkBestMin, attackerBestMax: atkBestMax,
+                    attackerGuaranteedKO: atkGKO,
+                    defenderBestMove: defBestMove, defenderBestMin: defBestMin, defenderBestMax: defBestMax,
+                    outspeeds: outspeeds, score: memberScore
+                });
+            }
+            r.members = members;
+            r.score = Math.min.apply(null, members.map(function(m){ return m.score; }));
+        }
+
+        
 
         /* ==== helpers ==== */
         function formatEvs(evs) {
@@ -327,15 +462,81 @@
         function createTeamCard(idx) {
             var card = $('<div>').addClass('team-card').attr('data-idx', idx);
             card.append($('<span>').addClass('card-num').text('#' + (idx+1)));
-            var sp = $('<select>').addClass('tc-species').html(__speciesOpts);
-            card.append($('<label>').text('Species ').append(sp));
-            card.append($('<label>').text('Lvl ').append($('<input>').addClass('tc-level').attr('type','number').val(50)));
+            // species input (text + datalist) to allow typing on mobile
+            var sp = $('<input>').addClass('tc-species').attr({'type':'text','autocomplete':'off','list':'species-datalist-'+idx});
+            var spDatalist = $('<datalist>').attr('id','species-datalist-'+idx).html(__speciesOpts);
+            var spImg = $('<img>').addClass('tc-sprite').hide();
+            var spWrap = $('<div>').addClass('tc-species-wrap').append(spImg).append(sp).append(spDatalist);
+            card.append($('<label>').text('Species ').append(spWrap));
+            // update sprite when species input changes (on input for live update and change for blur/enter)
+            sp.on('input change', function(){
+                var name = $(this).val();
+                var nat = getNationalNumber(name);
+                if (nat) {
+                    spImg.attr('src','Sprites/'+pad4(nat)+'.png').attr('alt',name).show().off('error').on('error', function(){ $(this).hide(); });
+                } else {
+                    spImg.hide();
+                }
+                // update datalist ordering so prefix matches appear first
+                var dl = $('#species-datalist-'+idx);
+                if (!window.__speciesList || !dl.length) return;
+                var pref = (name||'').toLowerCase().trim();
+                if (!pref) { dl.html(__speciesOpts); return; }
+                var sorted = __speciesList.slice().sort(function(a,b){
+                    var al = a.toLowerCase(), bl = b.toLowerCase();
+                    var aPref = al.indexOf(pref) === 0 ? 0 : (al.indexOf(pref) > -1 ? 1 : 2);
+                    var bPref = bl.indexOf(pref) === 0 ? 0 : (bl.indexOf(pref) > -1 ? 1 : 2);
+                    if (aPref !== bPref) return aPref - bPref;
+                    return al.localeCompare(bl);
+                });
+                var html = '';
+                sorted.forEach(function(s){ html += '<option value="'+s+'">'; });
+                dl.html(html);
+            });
+            card.append($('<label>').text('Lvl ').append($('<input>').addClass('tc-level').attr({'type':'number','min':1,'max':100}).val(50).on('change', function(){
+                var v = parseInt($(this).val()) || 1; if (v < 1) v = 1; if (v > 100) v = 100; $(this).val(v);
+            })));
             card.append($('<label>').text('Nature ').append($('<select>').addClass('tc-nature').html(__natureOpts)));
-            card.append($('<label>').text('Item ').append($('<input>').addClass('tc-item').val('').css('width','90px')));
-            card.append($('<label>').text('Ability ').append($('<input>').addClass('tc-ability').val('').css('width','80px')));
+            var itemSel = $('<select>').addClass('tc-item').css('width','120px').html(__itemOpts);
+            var itemImg = $('<img>').addClass('item-sprite').hide();
+            var itemWrap = $('<div>').css('display','flex').css('align-items','center').append(itemImg).append(itemSel);
+            card.append($('<label>').text('Item ').append(itemWrap));
+            // update item sprite on change
+            itemSel.change(function(){
+                var it = $(this).val();
+                var p = getItemSpritePath(it);
+                if (p) itemImg.attr('src', p).show().off('error').on('error', function(){ $(this).hide(); });
+                else itemImg.hide();
+            });
+            var abilSel = $('<select>').addClass('tc-ability').css('width','110px').html('<option value="">(None)</option>');
+            card.append($('<label>').text('Ability ').append(abilSel));
+            // update ability dropdown when species changes
+            sp.on('change.ability input.ability', function(){
+                var specName = $(this).val();
+                var pdx = (typeof pokedex !== 'undefined') ? pokedex : (typeof POKEDEX_ADV !== 'undefined' ? POKEDEX_ADV : {});
+                var entry = pdx[specName];
+                var abilities = (entry && entry.abilities) ? entry.abilities : [];
+                var html = '';
+                abilities.forEach(function(a){ html += '<option value="'+a+'">'+a+'</option>'; });
+                if (!abilities.length) html = '<option value="">(None)</option>';
+                abilSel.html(html);
+            });
             var evg = $('<div>').addClass('ev-group');
             ['HP','At','Df','Sa','Sd','Sp'].forEach(function(s){
-                evg.append($('<label>').text(s).append($('<input>').addClass('tc-ev-'+s.toLowerCase()).attr('type','number').val(0)));
+                var cls = 'tc-ev-'+s.toLowerCase();
+                var inp = $('<input>').addClass(cls).attr({'type':'number','min':0,'max':255}).val(0);
+                // enforce per-box 0..255 and total <= 510 by reducing this box if needed
+                inp.on('change', function(){
+                    var v = parseInt($(this).val()) || 0; if (v < 0) v = 0; if (v > 255) v = 255; $(this).val(v);
+                    var sum = 0;
+                    evg.find('input[type=number]').each(function(){ sum += parseInt($(this).val()) || 0; });
+                    if (sum > 510) {
+                        var excess = sum - 510;
+                        var newVal = Math.max(0, v - excess);
+                        $(this).val(newVal);
+                    }
+                });
+                evg.append($('<label>').text(s).append(inp));
             });
             card.append(evg);
             card.append($('<label>').text('IVs ').append($('<input>').addClass('tc-iv').attr('type','number').val(31)));
@@ -350,6 +551,29 @@
             for (var i = 1; i <= 4; i++) {
                 card.append($('<label>').text('M'+i+' ').append($('<select>').addClass('tc-move tc-move'+i).html(__moveOpts).css('width','120px')));
             }
+            // filter move dropdowns when species changes
+            sp.on('change.moves input.moves', function(){
+                var specName = $(this).val();
+                var allowed = (typeof LEARNSETS !== 'undefined' && LEARNSETS[specName]) ? LEARNSETS[specName] : null;
+                card.find('.tc-move').each(function(){
+                    var sel = $(this);
+                    var cur = sel.val();
+                    if (allowed) {
+                        var html = '<option value="">(No Move)</option>';
+                        allowed.forEach(function(m){ html += '<option value="'+m+'">'+m+'</option>'; });
+                        sel.html(html);
+                        // restore previous value if still valid
+                        if (cur && allowed.indexOf(cur) !== -1) sel.val(cur);
+                        else sel.val('');
+                    } else {
+                        sel.html(__moveOpts);
+                        sel.val(cur || '');
+                    }
+                });
+            });
+            // status condition
+            var statusOpts = '<option value="Healthy">Healthy</option><option value="Burned">Burned</option><option value="Paralyzed">Paralyzed</option><option value="Poisoned">Poisoned</option><option value="Badly Poisoned">Badly Poisoned</option><option value="Asleep">Asleep</option><option value="Frozen">Frozen</option>';
+            card.append($('<label>').text('Status ').append($('<select>').addClass('tc-status').html(statusOpts)));
             if (idx > 0) {
                 card.append($('<button>').addClass('remove-btn').text('\u2715').click(function(){ card.remove(); renumberCards(); }));
             }
@@ -370,23 +594,51 @@
                 var sp = $c.find('.tc-species').val();
                 if (!sp) return;
                 var lv = parseInt($c.find('.tc-level').val()) || 50;
+                if (lv < 1) lv = 1; if (lv > 100) lv = 100;
                 var nat = $c.find('.tc-nature').val();
                 var item = $c.find('.tc-item').val();
                 var ability = $c.find('.tc-ability').val();
                 var ivAll = parseInt($c.find('.tc-iv').val()) || 31;
                 var evs = {};
-                ['hp','at','df','sa','sd','sp'].forEach(function(k){ evs[k] = parseInt($c.find('.tc-ev-'+k).val()) || 0; });
+                ['hp','at','df','sa','sd','sp'].forEach(function(k){ evs[k] = parseInt($c.find('.tc-ev-'+k).val()) || 0; if (evs[k] < 0) evs[k] = 0; if (evs[k] > 255) evs[k] = 255; });
+                // enforce total EV limit 510 by reducing from last stats if necessary
+                var totalEvs = Object.keys(evs).reduce(function(acc,kk){ return acc + (evs[kk]||0); }, 0);
+                if (totalEvs > 510) {
+                    var order = ['sp','sd','sa','df','at','hp'];
+                    var excess = totalEvs - 510;
+                    for (var oi = 0; oi < order.length && excess > 0; oi++) {
+                        var k = order[oi];
+                        var reduce = Math.min(evs[k], excess);
+                        evs[k] -= reduce;
+                        excess -= reduce;
+                    }
+                }
                 var ivs = {hp:ivAll,at:ivAll,df:ivAll,sa:ivAll,sd:ivAll,sp:ivAll};
                 var boosts = {};
                 ['at','df','sa','sd','sp'].forEach(function(k){ boosts[k] = parseInt($c.find('.tc-boost-'+k).val()) || 0; });
                 var mvs = [];
                 for (var i = 1; i <= 4; i++) { var v = $c.find('.tc-move'+i).val(); if (v) mvs.push(v); }
-                team.push({species:sp, level:lv, nature:nat, item:item, ability:ability, evs:evs, ivs:ivs, moves:mvs, boosts:boosts});
+                var status = $c.find('.tc-status').val() || 'Healthy';
+                team.push({species:sp, level:lv, nature:nat, item:item, ability:ability, evs:evs, ivs:ivs, moves:mvs, boosts:boosts, status:status});
             });
             return team;
         }
 
         /* ==== pool / name filters ==== */
+        /* ==== build field objects from UI ==== */
+        function buildFieldsFromUI() {
+            var weather = $('#weatherSelect').val() || '';
+            var teamReflect = $('#teamReflect').is(':checked');
+            var teamLightScreen = $('#teamLightScreen').is(':checked');
+            var oppReflect = $('#oppReflect').is(':checked');
+            var oppLightScreen = $('#oppLightScreen').is(':checked');
+            // forward field: team attacks opponent → defender side has opponent's screens
+            var fieldForward = defaultField({weather: weather, isReflect: oppReflect, isLightScreen: oppLightScreen});
+            // reverse field: opponent attacks team → defender side has team's screens
+            var fieldReverse = defaultField({weather: weather, isReflect: teamReflect, isLightScreen: teamLightScreen});
+            return {fieldForward: fieldForward, fieldReverse: fieldReverse, weather: weather};
+        }
+
         function applyPoolFilter(list) {
             var pool = $('#poolFilter').val();
             if (!pool || pool === 'all') return list;
@@ -443,6 +695,7 @@
             tr.append(th('set','Set'));
             tr.append(th('item','Item'));
             tr.append(th('nature','Nat'));
+            tr.append(th('ability','Ability'));
             tr.append(th('evs','EVs'));
             tr.append($('<th>').text('Moves'));
             for (var i = 0; i < teamSize; i++) {
@@ -480,17 +733,11 @@
             var filtered = applyPoolFilter(list);
             filtered = applyNameFilter(filtered);
 
-            var sortMode = $('#matchupSort').val();
-            if (currentSortCol === 'score') {
-                if (sortMode === 'worst') currentSortDir = 'desc';
-                else if (sortMode === 'best') currentSortDir = 'asc';
-                else if (sortMode === 'name') { currentSortCol = 'species'; currentSortDir = 'asc'; }
-            }
+            // keep existing sorting (default set when calculating)
             filtered = sortList(filtered, currentSortCol, currentSortDir);
 
-            var mf = $('#matchupFilter').val();
-            if (mf === 'best50') filtered = filtered.slice(-50).reverse();
-            else if (mf === 'worst50') filtered = filtered.slice(0, 50);
+            // apply click-to-filter (matching sets sorted to top)
+            filtered = applyClickFilters(filtered);
 
             // update arrows
             $('#results th').each(function(){
@@ -512,9 +759,9 @@
                     } else tr.append($('<td>').text(r.species));
                 })();
                 tr.append($('<td>').text(r.setName));
-                // item cell with sprite
+                // item cell with sprite (clickable)
                 (function(){
-                    var itemTd = $('<td>');
+                    var itemTd = $('<td>').addClass('clickable-item');
                     var itemName = r.set.item || '';
                     if (itemName) {
                         var spritePath = getItemSpritePath(itemName);
@@ -524,15 +771,67 @@
                                 .on('error', function(){ $(this).hide(); });
                             itemTd.append(itemImg);
                         }
+                        if (__clickFilters.item === itemName) itemTd.addClass('filter-active');
+                        itemTd.click(function(){ toggleClickFilter('item', itemName); });
                     }
-                    itemTd.append($('<span>').text(itemName));
+                    var nameSpan = $('<span>').text(itemName);
+                    itemTd.append(nameSpan);
+                    
                     tr.append(itemTd);
                 })();
-                tr.append($('<td>').text(r.set.nature||''));
+                // nature cell (clickable)
+                (function(){
+                    var natName = r.set.nature || '';
+                    var natTd = $('<td>').addClass('clickable-nature').text(natName);
+                    if (natName) {
+                        if (__clickFilters.nature === natName) natTd.addClass('filter-active');
+                        natTd.click(function(){ toggleClickFilter('nature', natName); });
+                    }
+                    tr.append(natTd);
+                })();
+                // ability cell
+                (function(){
+                    var pdx = (typeof pokedex !== 'undefined') ? pokedex : (typeof POKEDEX_ADV !== 'undefined' ? POKEDEX_ADV : {});
+                    var entry = pdx[r.species];
+                    var abilities = (entry && entry.abilities) ? entry.abilities : [];
+                    var abilTd = $('<td>');
+                    if (abilities.length === 1) {
+                        var lbl = $('<span>').addClass('ability-label').text(abilities[0]);
+                        if (__abilityDescriptions[abilities[0]]) lbl.append($('<span>').addClass('ability-tip').text(__abilityDescriptions[abilities[0]]));
+                        abilTd.append(lbl);
+                        // store chosen ability on result for damage calc
+                        r.__chosenAbility = abilities[0];
+                    } else if (abilities.length === 2) {
+                        // two abilities: clickable to select which to compute against
+                        var chosen = r.__chosenAbility || null;
+                        abilities.forEach(function(ab, idx){
+                            if (idx > 0) abilTd.append($('<span>').addClass('ability-sep').text('/'));
+                            var lbl = $('<span>').addClass('ability-label clickable');
+                            lbl.text(ab);
+                            if (__abilityDescriptions[ab]) lbl.append($('<span>').addClass('ability-tip').text(__abilityDescriptions[ab]));
+                            if (chosen === ab) lbl.addClass('ability-active');
+                            else if (chosen && chosen !== ab) lbl.addClass('ability-inactive');
+                            lbl.click(function(e){
+                                e.stopPropagation();
+                                if (r.__chosenAbility === ab) r.__chosenAbility = null; // toggle off
+                                else r.__chosenAbility = ab;
+                                recalcRowWithAbility(r);
+                                renderResults(window.__lastResults || []);
+                            });
+                            abilTd.append(lbl);
+                        });
+                    }
+                    tr.append(abilTd);
+                })();
                 tr.append(renderEvs(r.set.evs));
-                // opponent moves
+                // opponent moves (clickable)
                 var movesTd = $('<td>');
-                (r.set.moves||[]).forEach(function(m){ movesTd.append(renderMoveLabel(m)); });
+                (r.set.moves||[]).forEach(function(moveName){
+                    var lbl = renderMoveLabel(moveName);
+                    if (__clickFilters.move === moveName) lbl.addClass('filter-active');
+                    lbl.click(function(e){ e.stopPropagation(); toggleClickFilter('move', moveName); });
+                    movesTd.append(lbl);
+                });
                 tr.append(movesTd);
 
                 // per-member columns
@@ -545,11 +844,12 @@
                     atkWrap.append($('<span>').addClass('mc-move').append(renderMoveLabel(m.attackerBestMove)));
                     atkWrap.append($('<span>').addClass('mc-dmg').text(m.attackerBestMin + '-' + m.attackerBestMax + '%'));
                     var spdSpan = $('<span>').addClass('mc-spd');
-                    if (m.outspeeds) spdSpan.addClass('fast').text('\u25B2 FAST');
+                    if (m.outspeeds) spdSpan.addClass('fast').text('\u25B2 FASTER');
                     else spdSpan.addClass('slow').text('\u25BC SLOW');
                     atkWrap.append(spdSpan);
                     atkTd.append(atkWrap);
                     if (m.attackerBestMin >= 100) atkTd.addClass('ohko');
+                    else if (m.attackerBestMax >= 100) atkTd.addClass('maybe-ohko');
                     tr.append(atkTd);
                     // "set → member" cell
                     var defTd = $('<td>').addClass('dmg-them');
@@ -558,6 +858,7 @@
                     defWrap.append($('<span>').addClass('mc-dmg').text(m.defenderBestMin + '-' + m.defenderBestMax + '%'));
                     defTd.append(defWrap);
                     if (m.defenderBestMin >= 100) defTd.addClass('ohko');
+                    else if (m.defenderBestMax >= 100) defTd.addClass('maybe-ohko');
                     tr.append(defTd);
                 }
                 tbody.append(tr);
@@ -572,17 +873,22 @@
 
             // cache dropdown option HTML
             var pdx = (typeof pokedex !== 'undefined') ? pokedex : (typeof POKEDEX_ADV !== 'undefined' ? POKEDEX_ADV : {});
-            __speciesOpts = Object.keys(pdx).sort().map(function(s){ return '<option value="'+s+'">'+s+'</option>'; }).join('');
+            __speciesList = Object.keys(pdx).sort();
+            __speciesOpts = __speciesList.map(function(s){ return '<option value="'+s+'">'+s+'</option>'; }).join('');
             var mv = (typeof moves !== 'undefined') ? moves : (typeof MOVES_ADV !== 'undefined' ? MOVES_ADV : {});
             __moveOpts = '<option value="">(No Move)</option>' + Object.keys(mv).sort().map(function(m){ return '<option value="'+m+'">'+m+'</option>'; }).join('');
             __natureOpts = Object.keys(NATURES).map(function(n){ return '<option value="'+n+'">'+n+'</option>'; }).join('');
+            // build item options (prefer ADV list if available, fallback to GSC)
+            var itemsList = (typeof ITEMS_ADV !== 'undefined') ? ITEMS_ADV : ((typeof ITEMS_GSC !== 'undefined') ? ITEMS_GSC : []);
+            var uniq = (itemsList && Array.isArray(itemsList)) ? itemsList.slice().sort() : [];
+            __itemOpts = '<option value="">(No Item)</option>' + uniq.map(function(it){ return '<option value="'+it+'">'+it+'</option>'; }).join('');
 
             // create first team card
             var card0 = createTeamCard(0);
             $('#teamContainer').append(card0);
-            card0.find('.tc-species').val('Pikachu');
+            card0.find('.tc-species').val('Pikachu').change();
             card0.find('.tc-nature').val('Timid');
-            card0.find('.tc-item').val('Light Ball');
+            card0.find('.tc-item').val('Light Ball').change();
             card0.find('.tc-ev-sa').val(252);
             card0.find('.tc-ev-sp').val(252);
             card0.find('.tc-move1').val('Thunderbolt');
@@ -608,7 +914,7 @@
                 try {
                     var teamInputs = buildTeamFromForm();
                     if (!teamInputs.length) { status.text('Add at least one Pokemon'); return; }
-                    var limit = parseInt($('#setLimit').val()) || 2000;
+                    var limit = 2000;
                     // determine opp level
                     var maxLevel = Math.max.apply(null, teamInputs.map(function(t){ return t.level||50; }));
                     var oppLevel;
@@ -624,7 +930,8 @@
                     window.__team = builtTeam;
                     window.__teamSize = builtTeam.length;
 
-                    var list = evaluateAllSetsTeam(builtTeam, {limit: limit, opponentLevel: oppLevel});
+                    var fields = buildFieldsFromUI();
+                    var list = evaluateAllSetsTeam(builtTeam, {limit: limit, opponentLevel: oppLevel, fieldForward: fields.fieldForward, fieldReverse: fields.fieldReverse});
                     window.__lastResults = list;
                     currentSortCol = 'score';
                     currentSortDir = 'desc';
@@ -636,12 +943,7 @@
             });
 
             // re-render on filter/sort changes
-            $('#poolFilter,#matchupSort,#matchupFilter,#nameFilter,#oppAuto,#oppLevel').on('change input', function(){
-                if (this.id === 'matchupSort') {
-                    var v = $(this).val();
-                    if (v === 'name') { currentSortCol = 'species'; currentSortDir = 'asc'; }
-                    else { currentSortCol = 'score'; currentSortDir = v==='best'?'asc':'desc'; }
-                }
+            $('#poolFilter,#nameFilter,#oppAuto,#oppLevel,#weatherSelect,#teamReflect,#teamLightScreen,#oppReflect,#oppLightScreen').on('change input', function(){
                 renderResults(window.__lastResults || []);
             });
 

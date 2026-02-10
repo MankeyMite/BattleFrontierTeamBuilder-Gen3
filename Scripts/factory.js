@@ -62,9 +62,10 @@
     }
     if (typeof global.killsShedinja === 'undefined') {
         global.killsShedinja = function (attacker, defender, move) {
-            if (!defender || defender.name !== 'Shedinja') return false;
-            if (!move || !move.bp) return false;
-            return true;
+            // Shedinja with Wonder Guard: only super-effective moves hit
+            // This function should NOT bypass Wonder Guard — return false for Shedinja
+            // and let the normal type-effectiveness + Wonder Guard check handle it
+            return false;
         };
     }
     if (typeof global.toSmogonStat === 'undefined') {
@@ -79,19 +80,20 @@
             return 'Normal';
         };
     }
-    function defaultField() {
+    function defaultField(opts) {
         // minimal Field object expected by damage engine
+        opts = opts || {};
         return {
-            weather: '',
-            isReflect: false,
-            isLightScreen: false,
-            format: 'singles',
+            weather: opts.weather || '',
+            isReflect: !!opts.isReflect,
+            isLightScreen: !!opts.isLightScreen,
+            format: opts.format || 'singles',
             isCharge: false,
             isHelpingHand: false,
             getWeather: function () { return this.weather; },
             getSide: function (idx) {
-                // side object used by getDamageResultADV; keep minimal fields
-                return {isReflect: false, isLightScreen: false, format: this.format};
+                // side object used by getDamageResultADV; includes weather
+                return {weather: this.weather, isReflect: this.isReflect, isLightScreen: this.isLightScreen, format: this.format};
             }
         };
     }
@@ -154,6 +156,7 @@
             maxHP: 1,
             curHP: 1,
             weight: input.weight || (dex && dex.w ? dex.w : 1),
+            status: input.status || 'Healthy',
             baseStats: base,
             hasType: function (t) { return (dex && (dex.t1 === t || dex.t2 === t)); }
         };
@@ -244,6 +247,13 @@
                 if (pushed >= limit) break;
                 var defLevel = (typeof options.opponentLevel !== 'undefined' && options.opponentLevel !== null) ? options.opponentLevel : 50;
                 var defInput = Object.assign({species: species, level: defLevel}, setObj);
+                // if set doesn't specify ability, look it up from the pokedex
+                if (!defInput.ability) {
+                    var gdx1 = (typeof pokedex !== 'undefined') ? pokedex : (typeof POKEDEX_ADV !== 'undefined' ? POKEDEX_ADV : null);
+                    var dxEntry1 = gdx1 && gdx1[species] ? gdx1[species] : null;
+                    var abils1 = dxEntry1 && dxEntry1.abilities ? dxEntry1.abilities : [];
+                    if (abils1.length === 1) defInput.ability = abils1[0];
+                }
                 var def = buildPoke(defInput);
                 // run attacker -> defender
                 var forward = calcGen3Matchup(atk, def, {field: field});
@@ -350,12 +360,21 @@
                 var setObj = sets[setName];
                 var defLevel = (typeof options.opponentLevel !== 'undefined' && options.opponentLevel !== null) ? options.opponentLevel : 50;
                 var defInput = Object.assign({species: species, level: defLevel}, setObj);
+                // if set doesn't specify ability, look it up from the pokedex
+                if (!defInput.ability) {
+                    var gdx2 = (typeof pokedex !== 'undefined') ? pokedex : (typeof POKEDEX_ADV !== 'undefined' ? POKEDEX_ADV : null);
+                    var dxEntry2 = gdx2 && gdx2[species] ? gdx2[species] : null;
+                    var abils2 = dxEntry2 && dxEntry2.abilities ? dxEntry2.abilities : [];
+                    if (abils2.length === 1) defInput.ability = abils2[0];
+                }
                 var def = buildPoke(defInput);
                 var members = [];
+                var fieldForward = options.fieldForward || field;
+                var fieldReverse = options.fieldReverse || field;
                 for (var ti = 0; ti < team.length; ti++) {
                     var atk = team[ti];
-                    var forward = calcGen3Matchup(atk, def, {field: field});
-                    var reverse = calcGen3Matchup(def, atk, {field: field});
+                    var forward = calcGen3Matchup(atk, def, {field: fieldForward});
+                    var reverse = calcGen3Matchup(def, atk, {field: fieldReverse});
                     var atkBestMove = '', atkBestMin = 0, atkBestMax = 0, atkGKO = false;
                     if (forward && Array.isArray(forward.perMove)) {
                         forward.perMove.forEach(function(m) {
@@ -461,6 +480,7 @@
     global.GROUP2 = GROUP2;
     global.GROUP3 = GROUP3;
     global.calcGen3Matchup = calcGen3Matchup;
+    global.defaultField = defaultField;
     global.filterHardSets = filterHardSets;
     // expose builder for UI use
     global.buildPoke = buildPoke;
