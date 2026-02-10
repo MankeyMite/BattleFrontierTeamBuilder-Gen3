@@ -710,8 +710,8 @@
                         else lbl = sn.substring(0,6);
                     }
                 }
-                tr.append(th('p'+(i+1)+'atk', lbl + '\u2192'));
-                tr.append(th('p'+(i+1)+'def', '\u2192' + lbl));
+                tr.append(th('p'+(i+1)+'atk', '<b>Dmg Done</b> ' + lbl + '\u2192'));
+                tr.append(th('p'+(i+1)+'def', '\u2192' + lbl + ' <b>Dmg Taken</b>'));
             }
             // re-bind header clicks
             tr.find('th[data-col]').off('click').on('click', function(){
