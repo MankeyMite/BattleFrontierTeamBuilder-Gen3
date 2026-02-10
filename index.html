@@ -845,7 +845,7 @@
                     atkWrap.append($('<span>').addClass('mc-dmg').text(m.attackerBestMin + '-' + m.attackerBestMax + '%'));
                     var spdSpan = $('<span>').addClass('mc-spd');
                     if (m.outspeeds) spdSpan.addClass('fast').text('\u25B2 FASTER');
-                    else spdSpan.addClass('slow').text('\u25BC SLOW');
+                    else spdSpan.addClass('slow').text('\u25BC SLOWER');
                     atkWrap.append(spdSpan);
                     atkTd.append(atkWrap);
                     if (m.attackerBestMin >= 100) atkTd.addClass('ohko');
