@@ -170,7 +170,11 @@
 
         // compute rawStats and maxHP
         poke.maxHP = statCalc(base.hp, poke.ivs.hp, poke.evs.hp, poke.level, true, 1);
-        poke.curHP = input.curHP || poke.maxHP;
+        if (typeof input.curHP !== 'undefined' && input.curHP !== null) {
+            poke.curHP = Number(input.curHP);
+        } else {
+            poke.curHP = poke.maxHP;
+        }
         ['at','df','sa','sd','sp'].forEach(function (s) {
             var natureMult = getNatureMult(poke.nature, s);
             poke.rawStats[s] = statCalc(base[s], poke.ivs[s], poke.evs[s], poke.level, false, natureMult);

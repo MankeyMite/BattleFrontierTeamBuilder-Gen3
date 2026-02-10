@@ -403,7 +403,7 @@
         /* ==== helpers ==== */
         function formatEvs(evs) {
             if (!evs) return '';
-            var lbl = {hp:'HP',at:'At',df:'Df',sa:'Sa',sd:'Sd',sp:'Sp'};
+            var lbl = {hp:'HP',at:'Atk',df:'Def',sa:'SpA',sd:'SpD',sp:'Spd'};
             var parts = [];
             ['hp','at','df','sa','sd','sp'].forEach(function(k) { if (evs[k]) parts.push(evs[k]+' '+lbl[k]); });
             return parts.length ? parts.join('/') : '0';
@@ -431,7 +431,7 @@
         }
         function renderEvs(evs) {
             var order = ['hp','at','df','sa','sd','sp'];
-            var labels = {hp:'HP',at:'At',df:'Df',sa:'SpA',sd:'SpD',sp:'Spd'};
+            var labels = {hp:'HP',at:'Atk',df:'Def',sa:'SpA',sd:'SpD',sp:'Spd'};
             var td = $('<td>');
             var grid = $('<div>').addClass('ev-grid');
             order.forEach(function(k){
@@ -522,8 +522,10 @@
                 abilSel.html(html);
             });
             var evg = $('<div>').addClass('ev-group');
-            ['HP','At','Df','Sa','Sd','Sp'].forEach(function(s){
-                var cls = 'tc-ev-'+s.toLowerCase();
+            var statKeys = ['hp','at','df','sa','sd','sp'];
+            var statLabels = {hp: 'HP', at: 'Atk', df: 'Def', sa: 'SpA', sd: 'SpD', sp: 'Spd'};
+            statKeys.forEach(function(k){
+                var cls = 'tc-ev-'+k;
                 var inp = $('<input>').addClass(cls).attr({'type':'number','min':0,'max':255}).val(0);
                 // enforce per-box 0..255 and total <= 510 by reducing this box if needed
                 inp.on('change', function(){
@@ -536,7 +538,7 @@
                         $(this).val(newVal);
                     }
                 });
-                evg.append($('<label>').text(s).append(inp));
+                evg.append($('<label>').text(statLabels[k]).append(inp));
             });
             card.append(evg);
             card.append($('<label>').text('IVs ').append($('<input>').addClass('tc-iv').attr('type','number').val(31)));
@@ -544,12 +546,14 @@
             var boostGroup = $('<div>').addClass('boost-group');
             var boostOpts = '';
             for (var b = -6; b <= 6; b++) { boostOpts += '<option value="'+b+'"'+(b===0?' selected':'')+'>'+( b>0?'+':'')+b+'</option>'; }
-            ['At','Df','Sa','Sd','Sp'].forEach(function(s){
-                boostGroup.append($('<label>').text(s).append($('<select>').addClass('tc-boost-'+s.toLowerCase()).html(boostOpts)));
+            var boostKeys = ['at','df','sa','sd','sp'];
+            var boostLabels = {at: 'Atk', df: 'Def', sa: 'SpA', sd: 'SpD', sp: 'Spd'};
+            boostKeys.forEach(function(k){
+                boostGroup.append($('<label>').text(boostLabels[k]).append($('<select>').addClass('tc-boost-'+k).html(boostOpts)));
             });
             card.append(boostGroup);
             for (var i = 1; i <= 4; i++) {
-                card.append($('<label>').text('M'+i+' ').append($('<select>').addClass('tc-move tc-move'+i).html(__moveOpts).css('width','120px')));
+                card.append($('<label>').text('Move ' + i + ' ').append($('<select>').addClass('tc-move tc-move'+i).html(__moveOpts).css('width','120px')));
             }
             // filter move dropdowns when species changes
             sp.on('change.moves input.moves', function(){
@@ -574,6 +578,43 @@
             // status condition
             var statusOpts = '<option value="Healthy">Healthy</option><option value="Burned">Burned</option><option value="Paralyzed">Paralyzed</option><option value="Poisoned">Poisoned</option><option value="Badly Poisoned">Badly Poisoned</option><option value="Asleep">Asleep</option><option value="Frozen">Frozen</option>';
             card.append($('<label>').text('Status ').append($('<select>').addClass('tc-status').html(statusOpts)));
+            // current HP input + display (Current HP: <input>/max (xx%))
+            var curHpInp = $('<input>').addClass('tc-curhp').attr({'type':'number','min':0}).css('width','80px');
+            var hpDisp = $('<span>').addClass('tc-hp-display').css({'margin-left':'6px','font-weight':'bold','display':'inline-block','transform':'translateY(3px)'}).text('/? (100%)');
+            var hpWrap = $('<div>').addClass('tc-hp-wrap').append($('<label>').text('Current HP ').append(curHpInp)).append(hpDisp).css({'display':'inline-flex','align-items':'center','gap':'6px'});
+            card.append(hpWrap);
+
+            // helper to update max HP and percentage display
+            function updateHPDisplay() {
+                var specName = sp.val();
+                var lv = parseInt(card.find('.tc-level').val()) || 50;
+                var ivAll = parseInt(card.find('.tc-iv').val()) || 31;
+                var evsObj = {};
+                ['hp','at','df','sa','sd','sp'].forEach(function(k){ evsObj[k] = parseInt(card.find('.tc-ev-'+k).val()) || 0; });
+                var nat = card.find('.tc-nature').val() || 'Hardy';
+                // build a temporary poke to compute maxHP using buildPoke
+                try {
+                    var tmp = buildPoke({species: specName, level: lv, ivs: {hp: ivAll, at: ivAll, df: ivAll, sa: ivAll, sd: ivAll, sp: ivAll}, evs: evsObj, nature: nat});
+                    var max = tmp.maxHP || 1;
+                    var cur = parseInt(curHpInp.val());
+                    if (isNaN(cur) || cur === null) cur = max;
+                    if (cur > max) { cur = max; curHpInp.val(cur); }
+                    var pct = 0;
+                    if (cur > 0) pct = Math.max(1, Math.round(100 * cur / max));
+                    hpDisp.text('/' + max + ' (' + pct + '%)');
+                    curHpInp.attr('max', max);
+                } catch (e) {
+                    // buildPoke may not be available yet; fallback
+                    hpDisp.text('/? (100%)');
+                }
+            }
+
+            // attach update handlers to inputs that affect max HP or current HP
+            sp.on('input change', updateHPDisplay);
+            card.find('.tc-level, .tc-iv').on('change input', updateHPDisplay);
+            card.find('.tc-ev-hp, .tc-ev-at, .tc-ev-df, .tc-ev-sa, .tc-ev-sd, .tc-ev-sp').on('change input', updateHPDisplay);
+            card.find('.tc-nature').on('change', updateHPDisplay);
+            curHpInp.on('change input', updateHPDisplay);
             if (idx > 0) {
                 card.append($('<button>').addClass('remove-btn').text('\u2715').click(function(){ card.remove(); renumberCards(); }));
             }
@@ -619,7 +660,10 @@
                 var mvs = [];
                 for (var i = 1; i <= 4; i++) { var v = $c.find('.tc-move'+i).val(); if (v) mvs.push(v); }
                 var status = $c.find('.tc-status').val() || 'Healthy';
-                team.push({species:sp, level:lv, nature:nat, item:item, ability:ability, evs:evs, ivs:ivs, moves:mvs, boosts:boosts, status:status});
+                var curHpVal = $c.find('.tc-curhp').val();
+                var teamEntry = {species:sp, level:lv, nature:nat, item:item, ability:ability, evs:evs, ivs:ivs, moves:mvs, boosts:boosts, status:status};
+                if (curHpVal !== undefined && curHpVal !== '') teamEntry.curHP = Number(curHpVal);
+                team.push(teamEntry);
             });
             return team;
         }

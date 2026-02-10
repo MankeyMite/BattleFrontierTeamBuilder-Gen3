@@ -195,7 +195,7 @@ function parseTutorLearnsets(text) {
     // Then parse per-species tutor learnsets
     // Format: [SPECIES_XXX] = (TUTOR(MOVE_YYY) | TUTOR(MOVE_ZZZ) | ...)
     const result = {};
-    const blockRe = /\[SPECIES_(\w+)\]\s*=\s*\(([\s\S]*?)\)/g;
+        const blockRe = /\[SPECIES_(\w+)\]\s*=\s*\(([\s\S]*?)\),/g;
     let m;
     while ((m = blockRe.exec(text)) !== null) {
         const species = speciesConstToDisplay('SPECIES_' + m[1]);
