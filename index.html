@@ -796,12 +796,36 @@
             if (atIdx !== -1) {
                 item = line1.substring(atIdx + 3).trim();
                 var left = line1.substring(0, atIdx).trim();
-                // check for (Species) pattern
-                var parenMatch = left.match(/\(([^)]+)\)/);
-                species = parenMatch ? parenMatch[1].trim() : left;
+                // Handle cases:
+                // - Nickname (Species) @ Item
+                // - Species (M) @ Item  or Species (F) @ Item  (also accept ♂/♀)
+                var nickMatch = left.match(/^(.*)\(([^)]+)\)\s*$/);
+                if (nickMatch && nickMatch[2]) {
+                    var inside = nickMatch[2].trim();
+                    if (/^(?:M|F|♂|♀)$/i.test(inside)) {
+                        // It's a gender marker; treat left as species without the gender
+                        species = left.replace(/\s*\((?:M|F|♂|♀)\)\s*$/i, '').trim();
+                    } else {
+                        // It's a nickname/species pattern where inside parentheses is the species
+                        species = inside;
+                    }
+                } else {
+                    // no parentheses: treat entire left as species
+                    species = left;
+                }
             } else {
-                var parenMatch2 = line1.match(/\(([^)]+)\)/);
-                species = parenMatch2 ? parenMatch2[1].trim() : line1.trim();
+                var leftNoAt = line1.trim();
+                var nickMatch2 = leftNoAt.match(/^(.*)\(([^)]+)\)\s*$/);
+                if (nickMatch2 && nickMatch2[2]) {
+                    var inside2 = nickMatch2[2].trim();
+                    if (/^(?:M|F|♂|♀)$/i.test(inside2)) {
+                        species = leftNoAt.replace(/\s*\((?:M|F|♂|♀)\)\s*$/i, '').trim();
+                    } else {
+                        species = inside2;
+                    }
+                } else {
+                    species = leftNoAt;
+                }
             }
 
             var ability = '', nature = '';
