@@ -189,7 +189,7 @@
         #teamContainer { padding: 6px 16px; background: var(--paper); border-bottom: 1px solid var(--border); }
         .team-card {
             display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end;
-            padding: 6px 8px; margin-bottom: 4px;
+            padding: 8px 16px; margin-bottom: 6px;
             background: #fff; border: 1px solid var(--border); border-radius: 6px;
         }
         .team-card label { display: flex; flex-direction: column; font-size: 10px; color: var(--muted); }
@@ -198,13 +198,34 @@
         .team-card input[type="number"] { width: 46px; }
         .team-card .ev-group { display: flex; gap: 3px; }
         .team-card .ev-group label { min-width: 32px; }
-        .tc-species-wrap { display:flex; align-items:center; gap:8px; }
-        .tc-sprite { width:20px; height:20px; object-fit:contain; display:block; image-rendering: auto; }
-        /* ensure the species select lines up with other inputs */
-        .tc-species-wrap select { height:22px; box-sizing:border-box; }
+        /* top row: card number, import, remove */
+        .tc-top-row { display:flex; align-items:center; gap:6px; width:100%; margin-bottom:2px; }
+        /* stat grid: header + EVs + IVs in columns */
+        .stat-grid { display:grid; grid-template-columns:auto repeat(6,1fr); gap:2px 4px; align-items:center; font-size:11px; }
+        .stat-grid .sg-label { font-weight:700; color:var(--muted); font-size:10px; text-align:center; }
+        .stat-grid .sg-row-label { font-weight:700; color:var(--muted); font-size:10px; text-align:right; padding-right:4px; }
+        .stat-grid input[type="number"] { width:42px; font-size:11px; padding:1px 3px; text-align:center; }
+        .tc-species-wrap { display:flex; align-items:flex-end; gap:12px; position:relative; }
+        .tc-sprite { width:48px; height:48px; object-fit:contain; display:block; image-rendering: auto; align-self:center; }
+        /* custom species autocomplete dropdown */
+        .sp-dropdown { position:absolute; top:100%; left:0; z-index:100; background:#fff; border:1px solid var(--border); border-top:0; border-radius:0 0 6px 6px; max-height:200px; overflow-y:auto; width:160px; box-shadow:0 4px 10px rgba(0,0,0,0.12); display:none; }
+        .sp-dropdown.open { display:block; }
+        .sp-dropdown .sp-opt { padding:3px 8px; cursor:pointer; font-size:12px; font-family:inherit; }
+        .sp-dropdown .sp-opt:hover, .sp-dropdown .sp-opt.highlighted { background:#e8f4ec; }
+        .sp-dropdown .sp-opt.selected { background:var(--accent-2); color:#fff; }
         .team-card .card-num { font-weight: 700; font-size: 13px; color: var(--accent); margin-right: 4px; align-self: center; }
         .remove-btn { border:0; background:transparent; color:#c44; font-size:16px; cursor:pointer; align-self:center; padding:2px 6px; }
         .remove-btn:hover { color:#a00; }
+        .import-btn { border:0; background:var(--accent-2); color:#fff; font-size:11px; font-weight:600; cursor:pointer; padding:3px 10px; border-radius:4px; }
+        .import-btn:hover { filter:brightness(1.15); }
+        .import-overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center; z-index:9999; }
+        .import-dialog { background:var(--paper); border:2px solid var(--border); border-radius:8px; padding:16px; width:360px; max-width:90%; box-shadow:0 4px 20px rgba(0,0,0,0.3); }
+        .import-dialog h3 { margin:0 0 8px; font-size:14px; color:var(--accent); }
+        .import-dialog textarea { width:100%; height:180px; font-family:Consolas,"Courier New",monospace; font-size:12px; border:1px solid var(--border); border-radius:4px; padding:6px; resize:vertical; }
+        .import-dialog .btn-row { display:flex; gap:8px; margin-top:10px; justify-content:flex-end; }
+        .import-dialog button { padding:5px 14px; border:0; border-radius:6px; cursor:pointer; font-weight:700; font-size:12px; }
+        .import-dialog .import-ok { background:linear-gradient(90deg,var(--accent-2),#3cc76e); color:#fff; }
+        .import-dialog .import-cancel { background:#ddd; color:#333; }
         .team-actions { padding: 6px 16px; background: var(--paper); border-bottom: 1px solid var(--border); display:flex; gap:10px; align-items:center; }
         .add-btn { border:0; background:var(--accent-2); color:#fff; font-size:18px; font-weight:700; width:32px; height:32px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; }
         .add-btn:hover { filter:brightness(1.1); }
@@ -264,6 +285,7 @@
                 <option value="group1">Group 1</option>
                 <option value="group2">Group 2</option>
                 <option value="group3" selected>Group 3</option>
+                <option value="frontier_brains">Frontier Brains</option>
                 <option value="all">All</option>
             </select>
         </label>
@@ -295,6 +317,27 @@
         </table>
     </div>
     <script>
+        /* ==== Hidden Power IV spreads for 70 BP in Gen 3 ==== */
+        var HP_TYPE_IVS = {
+            'Bug':      {hp:31,at:31,df:31,sa:31,sd:30,sp:30},
+            'Dark':     {hp:31,at:31,df:31,sa:31,sd:31,sp:31},
+            'Dragon':   {hp:30,at:31,df:31,sa:31,sd:31,sp:31},
+            'Electric': {hp:31,at:31,df:31,sa:30,sd:31,sp:31},
+            'Fighting': {hp:31,at:31,df:30,sa:30,sd:30,sp:30},
+            'Fire':     {hp:31,at:30,df:31,sa:30,sd:31,sp:30},
+            'Flying':   {hp:31,at:31,df:31,sa:30,sd:30,sp:30},
+            'Ghost':    {hp:31,at:30,df:31,sa:31,sd:30,sp:31},
+            'Grass':    {hp:30,at:31,df:31,sa:30,sd:31,sp:31},
+            'Ground':   {hp:31,at:31,df:31,sa:30,sd:30,sp:31},
+            'Ice':      {hp:31,at:31,df:31,sa:31,sd:31,sp:30},
+            'Poison':   {hp:31,at:31,df:30,sa:30,sd:30,sp:31},
+            'Psychic':  {hp:30,at:31,df:31,sa:31,sd:31,sp:30},
+            'Rock':     {hp:31,at:31,df:30,sa:31,sd:30,sp:30},
+            'Steel':    {hp:31,at:31,df:31,sa:31,sd:30,sp:31},
+            'Water':    {hp:31,at:31,df:31,sa:30,sd:31,sp:30}
+        };
+        var HP_TYPES = ['Bug','Dark','Dragon','Electric','Fighting','Fire','Flying','Ghost','Grass','Ground','Ice','Poison','Psychic','Rock','Steel','Water'];
+
         /* ==== cached option HTML (built once at init) ==== */
         var __speciesOpts = '', __moveOpts = '', __natureOpts = '', __itemOpts = '';
 
@@ -403,7 +446,7 @@
         /* ==== helpers ==== */
         function formatEvs(evs) {
             if (!evs) return '';
-            var lbl = {hp:'HP',at:'Atk',df:'Def',sa:'SpA',sd:'SpD',sp:'Spd'};
+            var lbl = {hp:'HP',at:'Atk',df:'Def',sa:'SpA',sd:'SpD',sp:'Spe'};
             var parts = [];
             ['hp','at','df','sa','sd','sp'].forEach(function(k) { if (evs[k]) parts.push(evs[k]+' '+lbl[k]); });
             return parts.length ? parts.join('/') : '0';
@@ -431,7 +474,7 @@
         }
         function renderEvs(evs) {
             var order = ['hp','at','df','sa','sd','sp'];
-            var labels = {hp:'HP',at:'Atk',df:'Def',sa:'SpA',sd:'SpD',sp:'Spd'};
+            var labels = {hp:'HP',at:'Atk',df:'Def',sa:'SpA',sd:'SpD',sp:'Spe'};
             var td = $('<td>');
             var grid = $('<div>').addClass('ev-grid');
             order.forEach(function(k){
@@ -461,14 +504,90 @@
         /* ==== team card management ==== */
         function createTeamCard(idx) {
             var card = $('<div>').addClass('team-card').attr('data-idx', idx);
-            card.append($('<span>').addClass('card-num').text('#' + (idx+1)));
-            // species input (text + datalist) to allow typing on mobile
-            var sp = $('<input>').addClass('tc-species').attr({'type':'text','autocomplete':'off','list':'species-datalist-'+idx});
-            var spDatalist = $('<datalist>').attr('id','species-datalist-'+idx).html(__speciesOpts);
+            // top row: card number + import + remove
+            var topRow = $('<div>').addClass('tc-top-row');
+            topRow.append($('<span>').addClass('card-num').text('#' + (idx+1)));
+            var importBtn = $('<button>').addClass('import-btn').text('Import').click(function(){ showImportDialog(card); });
+            topRow.append(importBtn);
+            card.append(topRow);
+            // species input with custom autocomplete
+            var sp = $('<input>').addClass('tc-species').attr({'type':'text','autocomplete':'off'});
             var spImg = $('<img>').addClass('tc-sprite').hide();
-            var spWrap = $('<div>').addClass('tc-species-wrap').append(spImg).append(sp).append(spDatalist);
+            var spDropdown = $('<div>').addClass('sp-dropdown');
+            var spWrap = $('<div>').addClass('tc-species-wrap').append(spImg).append(sp).append(spDropdown);
             card.append($('<label>').text('Species ').append(spWrap));
-            // update sprite when species input changes (on input for live update and change for blur/enter)
+
+            var hlIndex = -1; // highlighted index in dropdown
+            function buildDropdownItems(query) {
+                var list = window.__speciesList || [];
+                var q = (query || '').toLowerCase().trim();
+                var filtered;
+                if (!q) {
+                    filtered = list.slice(0, 30);
+                } else {
+                    // prefix matches first, then substring matches
+                    var prefix = [], sub = [];
+                    list.forEach(function(s){
+                        var sl = s.toLowerCase();
+                        if (sl.indexOf(q) === 0) prefix.push(s);
+                        else if (sl.indexOf(q) > 0) sub.push(s);
+                    });
+                    filtered = prefix.concat(sub).slice(0, 40);
+                }
+                spDropdown.empty();
+                hlIndex = -1;
+                filtered.forEach(function(s, i){
+                    var opt = $('<div>').addClass('sp-opt').attr('data-val', s).text(s);
+                    opt.on('mousedown', function(e){
+                        e.preventDefault(); // prevent blur
+                        sp.val(s).trigger('change');
+                        spDropdown.removeClass('open');
+                    });
+                    spDropdown.append(opt);
+                });
+                if (filtered.length) spDropdown.addClass('open');
+                else spDropdown.removeClass('open');
+            }
+
+            sp.on('input', function(){
+                buildDropdownItems($(this).val());
+            });
+            sp.on('focus', function(){
+                buildDropdownItems($(this).val());
+            });
+            sp.on('blur', function(){
+                // small delay so click on dropdown item registers
+                setTimeout(function(){ spDropdown.removeClass('open'); }, 150);
+            });
+            sp.on('keydown', function(e){
+                var opts = spDropdown.find('.sp-opt');
+                if (!opts.length) return;
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    hlIndex = Math.min(hlIndex + 1, opts.length - 1);
+                    opts.removeClass('highlighted');
+                    $(opts[hlIndex]).addClass('highlighted');
+                    opts[hlIndex].scrollIntoView({block:'nearest'});
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    hlIndex = Math.max(hlIndex - 1, 0);
+                    opts.removeClass('highlighted');
+                    $(opts[hlIndex]).addClass('highlighted');
+                    opts[hlIndex].scrollIntoView({block:'nearest'});
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (hlIndex >= 0 && hlIndex < opts.length) {
+                        sp.val($(opts[hlIndex]).attr('data-val')).trigger('change');
+                    } else if (opts.length === 1) {
+                        sp.val($(opts[0]).attr('data-val')).trigger('change');
+                    }
+                    spDropdown.removeClass('open');
+                } else if (e.key === 'Escape') {
+                    spDropdown.removeClass('open');
+                }
+            });
+
+            // update sprite when species input changes
             sp.on('input change', function(){
                 var name = $(this).val();
                 var nat = getNationalNumber(name);
@@ -477,21 +596,6 @@
                 } else {
                     spImg.hide();
                 }
-                // update datalist ordering so prefix matches appear first
-                var dl = $('#species-datalist-'+idx);
-                if (!window.__speciesList || !dl.length) return;
-                var pref = (name||'').toLowerCase().trim();
-                if (!pref) { dl.html(__speciesOpts); return; }
-                var sorted = __speciesList.slice().sort(function(a,b){
-                    var al = a.toLowerCase(), bl = b.toLowerCase();
-                    var aPref = al.indexOf(pref) === 0 ? 0 : (al.indexOf(pref) > -1 ? 1 : 2);
-                    var bPref = bl.indexOf(pref) === 0 ? 0 : (bl.indexOf(pref) > -1 ? 1 : 2);
-                    if (aPref !== bPref) return aPref - bPref;
-                    return al.localeCompare(bl);
-                });
-                var html = '';
-                sorted.forEach(function(s){ html += '<option value="'+s+'">'; });
-                dl.html(html);
             });
             card.append($('<label>').text('Lvl ').append($('<input>').addClass('tc-level').attr({'type':'number','min':1,'max':100}).val(50).on('change', function(){
                 var v = parseInt($(this).val()) || 1; if (v < 1) v = 1; if (v > 100) v = 100; $(this).val(v);
@@ -521,33 +625,43 @@
                 if (!abilities.length) html = '<option value="">(None)</option>';
                 abilSel.html(html);
             });
-            var evg = $('<div>').addClass('ev-group');
+            // stat grid: header row, EV row, IV row
             var statKeys = ['hp','at','df','sa','sd','sp'];
-            var statLabels = {hp: 'HP', at: 'Atk', df: 'Def', sa: 'SpA', sd: 'SpD', sp: 'Spd'};
+            var statLabels = {hp: 'HP', at: 'Atk', df: 'Def', sa: 'SpA', sd: 'SpD', sp: 'Spe'};
+            var sgrid = $('<div>').addClass('stat-grid');
+            // header row
+            sgrid.append($('<div>')); // empty top-left corner
+            statKeys.forEach(function(k){ sgrid.append($('<div>').addClass('sg-label').text(statLabels[k])); });
+            // EV row
+            sgrid.append($('<div>').addClass('sg-row-label').text('EVs'));
+            var evInputs = {};
             statKeys.forEach(function(k){
-                var cls = 'tc-ev-'+k;
-                var inp = $('<input>').addClass(cls).attr({'type':'number','min':0,'max':255}).val(0);
-                // enforce per-box 0..255 and total <= 510 by reducing this box if needed
+                var inp = $('<input>').addClass('tc-ev-'+k).attr({'type':'number','min':0,'max':255}).val(0);
                 inp.on('change', function(){
                     var v = parseInt($(this).val()) || 0; if (v < 0) v = 0; if (v > 255) v = 255; $(this).val(v);
                     var sum = 0;
-                    evg.find('input[type=number]').each(function(){ sum += parseInt($(this).val()) || 0; });
-                    if (sum > 510) {
-                        var excess = sum - 510;
-                        var newVal = Math.max(0, v - excess);
-                        $(this).val(newVal);
-                    }
+                    sgrid.find('.tc-ev-hp,.tc-ev-at,.tc-ev-df,.tc-ev-sa,.tc-ev-sd,.tc-ev-sp').each(function(){ sum += parseInt($(this).val()) || 0; });
+                    if (sum > 510) { var excess = sum - 510; $(this).val(Math.max(0, v - excess)); }
                 });
-                evg.append($('<label>').text(statLabels[k]).append(inp));
+                evInputs[k] = inp;
+                sgrid.append($('<div>').append(inp));
             });
-            card.append(evg);
-            card.append($('<label>').text('IVs ').append($('<input>').addClass('tc-iv').attr('type','number').val(31)));
+            // IV row
+            sgrid.append($('<div>').addClass('sg-row-label').text('IVs'));
+            statKeys.forEach(function(k){
+                var inp = $('<input>').addClass('tc-iv-'+k).attr({'type':'number','min':0,'max':31}).val(31);
+                inp.on('change', function(){
+                    var v = parseInt($(this).val()) || 0; if (v < 0) v = 0; if (v > 31) v = 31; $(this).val(v);
+                });
+                sgrid.append($('<div>').append(inp));
+            });
+            card.append(sgrid);
             // stat boost selectors (stages -6 to +6)
             var boostGroup = $('<div>').addClass('boost-group');
             var boostOpts = '';
             for (var b = -6; b <= 6; b++) { boostOpts += '<option value="'+b+'"'+(b===0?' selected':'')+'>'+( b>0?'+':'')+b+'</option>'; }
             var boostKeys = ['at','df','sa','sd','sp'];
-            var boostLabels = {at: 'Atk', df: 'Def', sa: 'SpA', sd: 'SpD', sp: 'Spd'};
+            var boostLabels = {at: 'Atk', df: 'Def', sa: 'SpA', sd: 'SpD', sp: 'Spe'};
             boostKeys.forEach(function(k){
                 boostGroup.append($('<label>').text(boostLabels[k]).append($('<select>').addClass('tc-boost-'+k).html(boostOpts)));
             });
@@ -564,16 +678,34 @@
                     var cur = sel.val();
                     if (allowed) {
                         var html = '<option value="">(No Move)</option>';
-                        allowed.forEach(function(m){ html += '<option value="'+m+'">'+m+'</option>'; });
+                        allowed.forEach(function(m){
+                            if (m === 'Hidden Power') {
+                                HP_TYPES.forEach(function(t){ html += '<option value="Hidden Power '+t+'">Hidden Power '+t+'</option>'; });
+                            } else {
+                                html += '<option value="'+m+'">'+m+'</option>';
+                            }
+                        });
                         sel.html(html);
                         // restore previous value if still valid
-                        if (cur && allowed.indexOf(cur) !== -1) sel.val(cur);
+                        if (cur && sel.find('option[value="'+cur.replace(/"/g,'\\"')+'"]').length) sel.val(cur);
                         else sel.val('');
                     } else {
                         sel.html(__moveOpts);
                         sel.val(cur || '');
                     }
                 });
+            });
+            // auto-set IVs when a Hidden Power type is selected
+            card.find('.tc-move').on('change', function(){
+                var val = $(this).val() || '';
+                var hpMatch = val.match(/^Hidden Power (.+)$/);
+                if (hpMatch && HP_TYPE_IVS[hpMatch[1]]) {
+                    var spread = HP_TYPE_IVS[hpMatch[1]];
+                    ['hp','at','df','sa','sd','sp'].forEach(function(k){
+                        card.find('.tc-iv-'+k).val(spread[k]);
+                    });
+                    card.find('.tc-level').trigger('change'); // refresh HP display
+                }
             });
             // status condition
             var statusOpts = '<option value="Healthy">Healthy</option><option value="Burned">Burned</option><option value="Paralyzed">Paralyzed</option><option value="Poisoned">Poisoned</option><option value="Badly Poisoned">Badly Poisoned</option><option value="Asleep">Asleep</option><option value="Frozen">Frozen</option>';
@@ -588,21 +720,23 @@
             function updateHPDisplay() {
                 var specName = sp.val();
                 var lv = parseInt(card.find('.tc-level').val()) || 50;
-                var ivAll = parseInt(card.find('.tc-iv').val()) || 31;
+                var ivsObj = {};
+                ['hp','at','df','sa','sd','sp'].forEach(function(k){ ivsObj[k] = parseInt(card.find('.tc-iv-'+k).val()); if (isNaN(ivsObj[k])) ivsObj[k] = 31; });
                 var evsObj = {};
                 ['hp','at','df','sa','sd','sp'].forEach(function(k){ evsObj[k] = parseInt(card.find('.tc-ev-'+k).val()) || 0; });
                 var nat = card.find('.tc-nature').val() || 'Hardy';
                 // build a temporary poke to compute maxHP using buildPoke
                 try {
-                    var tmp = buildPoke({species: specName, level: lv, ivs: {hp: ivAll, at: ivAll, df: ivAll, sa: ivAll, sd: ivAll, sp: ivAll}, evs: evsObj, nature: nat});
-                    var max = tmp.maxHP || 1;
-                    var cur = parseInt(curHpInp.val());
-                    if (isNaN(cur) || cur === null) cur = max;
-                    if (cur > max) { cur = max; curHpInp.val(cur); }
-                    var pct = 0;
-                    if (cur > 0) pct = Math.max(1, Math.round(100 * cur / max));
-                    hpDisp.text('/' + max + ' (' + pct + '%)');
-                    curHpInp.attr('max', max);
+                        var tmp = buildPoke({species: specName, level: lv, ivs: ivsObj, evs: evsObj, nature: nat});
+                        var max = tmp.maxHP || 1;
+                        var cur = parseInt(curHpInp.val());
+                        if (isNaN(cur) || cur === null) cur = max;
+                        if (cur > max) cur = max;
+                        curHpInp.val(cur);
+                        var pct = 0;
+                        if (cur > 0) pct = Math.max(1, Math.round(100 * cur / max));
+                        hpDisp.text('/' + max + ' (' + pct + '%)');
+                        curHpInp.attr('max', max);
                 } catch (e) {
                     // buildPoke may not be available yet; fallback
                     hpDisp.text('/? (100%)');
@@ -611,15 +745,169 @@
 
             // attach update handlers to inputs that affect max HP or current HP
             sp.on('input change', updateHPDisplay);
-            card.find('.tc-level, .tc-iv').on('change input', updateHPDisplay);
-            card.find('.tc-ev-hp, .tc-ev-at, .tc-ev-df, .tc-ev-sa, .tc-ev-sd, .tc-ev-sp').on('change input', updateHPDisplay);
+            // when species changes (select/change), set current HP to full
+            sp.on('change', function(){
+                try { updateHPDisplay(); } catch(e) {}
+                var max = parseInt(curHpInp.attr('max')) || null;
+                if (max) {
+                    curHpInp.val(max);
+                    try { updateHPDisplay(); } catch(e) {}
+                }
+            });
+            card.find('.tc-level').on('change input', updateHPDisplay);
+            card.find('.tc-iv-hp,.tc-iv-at,.tc-iv-df,.tc-iv-sa,.tc-iv-sd,.tc-iv-sp').on('change input', updateHPDisplay);
+            card.find('.tc-ev-hp,.tc-ev-at,.tc-ev-df,.tc-ev-sa,.tc-ev-sd,.tc-ev-sp').on('change input', updateHPDisplay);
             card.find('.tc-nature').on('change', updateHPDisplay);
             curHpInp.on('change input', updateHPDisplay);
             if (idx > 0) {
-                card.append($('<button>').addClass('remove-btn').text('\u2715').click(function(){ card.remove(); renumberCards(); }));
+                topRow.append($('<button>').addClass('remove-btn').text('\u2715').click(function(){ card.remove(); renumberCards(); }));
             }
             return card;
         }
+        /* ==== Showdown import dialog & parser ==== */
+        function showImportDialog(card) {
+            var overlay = $('<div>').addClass('import-overlay');
+            var dialog = $('<div>').addClass('import-dialog');
+            dialog.append($('<h3>').text('Import Pok\u00E9mon Set'));
+            var ta = $('<textarea>').attr('placeholder','Linoone @ Choice Band\nAbility: Pickup\nEVs: 252 Atk / 4 Def / 252 Spe\nAdamant Nature\n- Trick\n- Belly Drum\n- Extreme Speed\n- Shadow Ball');
+            dialog.append(ta);
+            var btnRow = $('<div>').addClass('btn-row');
+            btnRow.append($('<button>').addClass('import-cancel').text('Cancel').click(function(){ overlay.remove(); }));
+            btnRow.append($('<button>').addClass('import-ok').text('Import').click(function(){
+                parseAndApplySet(card, ta.val());
+                overlay.remove();
+            }));
+            dialog.append(btnRow);
+            overlay.append(dialog);
+            overlay.click(function(e){ if (e.target === overlay[0]) overlay.remove(); });
+            $('body').append(overlay);
+            ta.focus();
+        }
+
+        function parseAndApplySet(card, text) {
+            if (!text || !text.trim()) return;
+            var lines = text.trim().split('\n').map(function(l){ return l.trim(); }).filter(function(l){ return l.length > 0; });
+            if (!lines.length) return;
+
+            // Line 1: Species @ Item  OR  Nickname (Species) @ Item
+            var line1 = lines[0];
+            var species = '', item = '';
+            var atIdx = line1.lastIndexOf(' @ ');
+            if (atIdx !== -1) {
+                item = line1.substring(atIdx + 3).trim();
+                var left = line1.substring(0, atIdx).trim();
+                // check for (Species) pattern
+                var parenMatch = left.match(/\(([^)]+)\)/);
+                species = parenMatch ? parenMatch[1].trim() : left;
+            } else {
+                var parenMatch2 = line1.match(/\(([^)]+)\)/);
+                species = parenMatch2 ? parenMatch2[1].trim() : line1.trim();
+            }
+
+            var ability = '', nature = '';
+            var evs = {hp:0,at:0,df:0,sa:0,sd:0,sp:0};
+            var ivs = {hp:31,at:31,df:31,sa:31,sd:31,sp:31};
+            var movesList = [];
+            var level = null;
+
+            var statMap = {'HP':'hp','Atk':'at','Def':'df','SpA':'sa','SpD':'sd','Spe':'sp','Spd':'sp','Speed':'sp','Attack':'at','Defense':'df','Sp.Atk':'sa','Sp.Def':'sd'};
+
+            for (var i = 1; i < lines.length; i++) {
+                var ln = lines[i];
+                if (ln.indexOf('Ability:') === 0) {
+                    ability = ln.substring(8).trim();
+                } else if (ln.indexOf('Level:') === 0) {
+                    level = parseInt(ln.substring(6).trim()) || null;
+                } else if (ln.indexOf('EVs:') === 0) {
+                    var evParts = ln.substring(4).split('/');
+                    evParts.forEach(function(p){
+                        p = p.trim();
+                        var m = p.match(/^(\d+)\s+(.+)$/);
+                        if (m) {
+                            var val = parseInt(m[1]);
+                            var key = statMap[m[2].trim()];
+                            if (key) evs[key] = val;
+                        }
+                    });
+                } else if (ln.indexOf('IVs:') === 0) {
+                    var ivParts = ln.substring(4).split('/');
+                    ivParts.forEach(function(p){
+                        p = p.trim();
+                        var m = p.match(/^(\d+)\s+(.+)$/);
+                        if (m) {
+                            var val = parseInt(m[1]);
+                            var key = statMap[m[2].trim()];
+                            if (key) ivs[key] = val;
+                        }
+                    });
+                } else if (ln.match(/Nature$/i)) {
+                    nature = ln.replace(/\s*Nature$/i, '').trim();
+                } else if (ln.indexOf('- ') === 0) {
+                    var mv = ln.substring(2).trim();
+                    // normalize Hidden Power formats like "Hidden Power [Bug]" to "Hidden Power Bug"
+                    var hpBracket = mv.match(/^Hidden Power\s*\[\s*([^\]]+)\s*\]$/i);
+                    if (hpBracket) {
+                        var t = hpBracket[1].trim();
+                        t = t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
+                        mv = 'Hidden Power ' + t;
+                    }
+                    // also normalize parentheses form "Hidden Power (Bug)"
+                    var hpParen = mv.match(/^Hidden Power\s*\(\s*([^\)]+)\s*\)$/i);
+                    if (hpParen) {
+                        var t2 = hpParen[1].trim();
+                        t2 = t2.charAt(0).toUpperCase() + t2.slice(1).toLowerCase();
+                        mv = 'Hidden Power ' + t2;
+                    }
+                    movesList.push(mv);
+                }
+            }
+
+            // If imported moves include a Hidden Power type, use that to set IVs
+            var hpFound = null;
+            movesList.forEach(function(mv){
+                var hm = mv.match(/^Hidden Power\s+([A-Za-z]+)$/i);
+                if (hm) {
+                    var t = hm[1].trim();
+                    t = t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
+                    if (HP_TYPE_IVS[t]) hpFound = t;
+                }
+            });
+            if (hpFound) {
+                ivs = {};
+                ['hp','at','df','sa','sd','sp'].forEach(function(k){ ivs[k] = HP_TYPE_IVS[hpFound][k]; });
+            }
+
+            // Apply to card
+            var sp = card.find('.tc-species');
+            sp.val(species).trigger('change');
+
+            if (level !== null) card.find('.tc-level').val(level);
+            if (item) {
+                card.find('.tc-item').val(item).trigger('change');
+            }
+            if (nature) card.find('.tc-nature').val(nature);
+            if (ability) {
+                // wait a tick for ability dropdown to populate from species change
+                setTimeout(function(){
+                    card.find('.tc-ability').val(ability);
+                }, 50);
+            }
+            ['hp','at','df','sa','sd','sp'].forEach(function(k){
+                card.find('.tc-iv-'+k).val(ivs[k]);
+                card.find('.tc-ev-'+k).val(evs[k]);
+            });
+            // set moves (wait a tick for move dropdowns to populate from species change)
+            setTimeout(function(){
+                for (var mi = 0; mi < 4; mi++) {
+                    var sel = card.find('.tc-move'+(mi+1));
+                    if (mi < movesList.length) sel.val(movesList[mi]);
+                    else sel.val('');
+                }
+                // trigger HP update
+                card.find('.tc-level').trigger('change');
+            }, 100);
+        }
+
         function renumberCards() {
             $('#teamContainer .team-card').each(function(i) {
                 $(this).attr('data-idx', i).find('.card-num').text('#' + (i+1));
@@ -639,7 +927,8 @@
                 var nat = $c.find('.tc-nature').val();
                 var item = $c.find('.tc-item').val();
                 var ability = $c.find('.tc-ability').val();
-                var ivAll = parseInt($c.find('.tc-iv').val()) || 31;
+                var ivs = {};
+                ['hp','at','df','sa','sd','sp'].forEach(function(k){ ivs[k] = parseInt($c.find('.tc-iv-'+k).val()); if (isNaN(ivs[k])) ivs[k] = 31; if (ivs[k] < 0) ivs[k] = 0; if (ivs[k] > 31) ivs[k] = 31; });
                 var evs = {};
                 ['hp','at','df','sa','sd','sp'].forEach(function(k){ evs[k] = parseInt($c.find('.tc-ev-'+k).val()) || 0; if (evs[k] < 0) evs[k] = 0; if (evs[k] > 255) evs[k] = 255; });
                 // enforce total EV limit 510 by reducing from last stats if necessary
@@ -654,7 +943,6 @@
                         excess -= reduce;
                     }
                 }
-                var ivs = {hp:ivAll,at:ivAll,df:ivAll,sa:ivAll,sd:ivAll,sp:ivAll};
                 var boosts = {};
                 ['at','df','sa','sd','sp'].forEach(function(k){ boosts[k] = parseInt($c.find('.tc-boost-'+k).val()) || 0; });
                 var mvs = [];
@@ -683,9 +971,35 @@
             return {fieldForward: fieldForward, fieldReverse: fieldReverse, weather: weather};
         }
 
+        /* ==== Frontier Brain grouping sort ==== */
+        function sortFrontierBrains(list) {
+            var brainOrder = ['Greta','Tucker','Lucy','Spenser','Brandon','Anabel'];
+            var brainIdx = {}; brainOrder.forEach(function(n,i){ brainIdx[n] = i; });
+            var tierOrder = { 'Silver': 0, 'Gold': 1 };
+            var brainPattern = /\b(Anabel|Tucker|Greta|Lucy|Brandon|Spenser)\s+(Silver|Gold)\b/i;
+            return list.slice().sort(function(a,b){
+                var ma = a.setName.match(brainPattern);
+                var mb = b.setName.match(brainPattern);
+                if (!ma && !mb) return 0;
+                if (!ma) return 1;
+                if (!mb) return -1;
+                var brainA = brainIdx[ma[1]] != null ? brainIdx[ma[1]] : 99;
+                var brainB = brainIdx[mb[1]] != null ? brainIdx[mb[1]] : 99;
+                if (brainA !== brainB) return brainA - brainB;
+                var tierA = tierOrder[ma[2]] != null ? tierOrder[ma[2]] : 2;
+                var tierB = tierOrder[mb[2]] != null ? tierOrder[mb[2]] : 2;
+                if (tierA !== tierB) return tierA - tierB;
+                return a.species.localeCompare(b.species);
+            });
+        }
+
         function applyPoolFilter(list) {
             var pool = $('#poolFilter').val();
             if (!pool || pool === 'all') return list;
+            if (pool === 'frontier_brains') {
+                var brainPattern = /\b(Anabel|Tucker|Greta|Lucy|Brandon|Spenser)\s+(Silver|Gold)\b/i;
+                return list.filter(function(r){ return brainPattern.test(r.setName); });
+            }
             var groups = {
                 'group1': (typeof GROUP1 !== 'undefined') ? GROUP1 : null,
                 'group2': (typeof GROUP2 !== 'undefined') ? GROUP2 : null,
@@ -777,8 +1091,13 @@
             var filtered = applyPoolFilter(list);
             filtered = applyNameFilter(filtered);
 
-            // keep existing sorting (default set when calculating)
-            filtered = sortList(filtered, currentSortCol, currentSortDir);
+            // When Frontier Brains pool is selected, default sort groups by trainer (Silver then Gold)
+            var pool = $('#poolFilter').val();
+            if (pool === 'frontier_brains' && currentSortCol === 'score') {
+                filtered = sortFrontierBrains(filtered);
+            } else {
+                filtered = sortList(filtered, currentSortCol, currentSortDir);
+            }
 
             // apply click-to-filter (matching sets sorted to top)
             filtered = applyClickFilters(filtered);
@@ -933,8 +1252,13 @@
             card0.find('.tc-species').val('Pikachu').change();
             card0.find('.tc-nature').val('Timid');
             card0.find('.tc-item').val('Light Ball').change();
-            card0.find('.tc-ev-sa').val(252);
-            card0.find('.tc-ev-sp').val(252);
+            // default EVs for first pokemon set to 0
+            card0.find('.tc-ev-hp').val(0);
+            card0.find('.tc-ev-at').val(0);
+            card0.find('.tc-ev-df').val(0);
+            card0.find('.tc-ev-sa').val(0);
+            card0.find('.tc-ev-sd').val(0);
+            card0.find('.tc-ev-sp').val(0);
             card0.find('.tc-move1').val('Thunderbolt');
             card0.find('.tc-move2').val('Quick Attack');
 
