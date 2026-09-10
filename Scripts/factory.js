@@ -403,6 +403,10 @@
                         attackerBestMove: atkBestMove, attackerBestMin: atkBestMin, attackerBestMax: atkBestMax,
                         attackerGuaranteedKO: atkGKO,
                         defenderBestMove: defBestMove, defenderBestMin: defBestMin, defenderBestMax: defBestMax,
+                        // Keep every real move's calculation so the results table can show
+                        // a move other than the strongest one without recalculating the row.
+                        attackerMoves: (forward && Array.isArray(forward.perMove)) ? forward.perMove.filter(function(m){ return m && m.move && m.move !== '(No Move)'; }) : [],
+                        defenderMoves: (reverse && Array.isArray(reverse.perMove)) ? reverse.perMove.filter(function(m){ return m && m.move && m.move !== '(No Move)'; }) : [],
                         outspeeds: outspeeds, score: memberScore
                     });
                 }

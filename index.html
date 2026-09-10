@@ -232,6 +232,18 @@
         /* compact combined cells for member matchups */
         .matchup-cell { display:flex; flex-direction:column; gap:1px; }
         .matchup-cell .mc-move { font-size:10px; }
+        .mc-move-picker { position:relative; align-self:flex-start; }
+        .mc-move-trigger { cursor:pointer; }
+        .mc-move-caret { font-size:8px; margin-left:1px; }
+        .mc-move-menu {
+            display:none; position:absolute; top:calc(100% + 2px); left:0; z-index:30;
+            width:max-content; max-width:220px; padding:3px; background:var(--paper);
+            border:1px solid var(--border); border-radius:4px; box-shadow:0 3px 8px rgba(0,0,0,0.2);
+        }
+        .mc-move-picker.open .mc-move-menu { display:block; }
+        .mc-move-option { display:block; width:max-content; margin:1px; }
+        .mc-move-option.selected { outline:2px solid var(--accent-2); }
+        #results tr.move-picker-open { position:relative; z-index:20; }
         .matchup-cell .mc-dmg { font-size:11px; font-weight:600; }
         .matchup-cell .mc-spd { font-size:9px; font-weight:700; padding:1px 3px; border-radius:3px; display:inline-block; }
         .mc-spd.fast { background:#c6eabc; color:#1a6b3c; }
@@ -430,10 +442,19 @@
                 if (def.boosts && def.boosts.sp) defSpeed = getModifiedStat(defSpeed, def.boosts.sp);
                 var outspeeds = atkSpeed > defSpeed;
                 var memberScore = defBestMax - atkBestMax + (outspeeds ? -40 : 0) + (atkGKO ? -200 : 0);
+                var previousMember = r.members && r.members[ti] ? r.members[ti] : null;
+                var attackerMoves = (forward && Array.isArray(forward.perMove)) ? forward.perMove.filter(function(m){ return m && m.move && m.move !== '(No Move)'; }) : [];
+                var defenderMoves = (reverse && Array.isArray(reverse.perMove)) ? reverse.perMove.filter(function(m){ return m && m.move && m.move !== '(No Move)'; }) : [];
+                var previousAttackerMove = previousMember && previousMember.attackerSelectedMove;
+                var previousDefenderMove = previousMember && previousMember.defenderSelectedMove;
                 members.push({
                     attackerBestMove: atkBestMove, attackerBestMin: atkBestMin, attackerBestMax: atkBestMax,
                     attackerGuaranteedKO: atkGKO,
                     defenderBestMove: defBestMove, defenderBestMin: defBestMin, defenderBestMax: defBestMax,
+                    attackerMoves: attackerMoves,
+                    defenderMoves: defenderMoves,
+                    attackerSelectedMove: attackerMoves.some(function(m){ return m.move === previousAttackerMove; }) ? previousAttackerMove : '',
+                    defenderSelectedMove: defenderMoves.some(function(m){ return m.move === previousDefenderMove; }) ? previousDefenderMove : '',
                     outspeeds: outspeeds, score: memberScore
                 });
             }
@@ -471,6 +492,52 @@
             var mvGlobal = (typeof moves !== 'undefined') ? moves : (typeof MOVES_ADV !== 'undefined' ? MOVES_ADV : {});
             var type = (mvGlobal[moveName] && mvGlobal[moveName].type) ? mvGlobal[moveName].type.toLowerCase() : 'normal';
             return $('<span>').addClass('move-label type-' + type.replace(/[^a-z0-9]+/g,'')).text(moveName);
+        }
+        function selectedDamageMove(member, direction) {
+            var movesKey = direction === 'attacker' ? 'attackerMoves' : 'defenderMoves';
+            var selectedKey = direction === 'attacker' ? 'attackerSelectedMove' : 'defenderSelectedMove';
+            var bestMoveKey = direction === 'attacker' ? 'attackerBestMove' : 'defenderBestMove';
+            var moves = Array.isArray(member[movesKey]) ? member[movesKey] : [];
+            var selectedName = member[selectedKey] || member[bestMoveKey];
+            for (var i = 0; i < moves.length; i++) {
+                if (moves[i].move === selectedName) return moves[i];
+            }
+            return {
+                move: member[bestMoveKey] || '',
+                minPercent: direction === 'attacker' ? member.attackerBestMin : member.defenderBestMin,
+                maxPercent: direction === 'attacker' ? member.attackerBestMax : member.defenderBestMax
+            };
+        }
+        function renderDamageMovePicker(member, direction) {
+            var movesKey = direction === 'attacker' ? 'attackerMoves' : 'defenderMoves';
+            var selectedKey = direction === 'attacker' ? 'attackerSelectedMove' : 'defenderSelectedMove';
+            var selected = selectedDamageMove(member, direction);
+            var moveList = Array.isArray(member[movesKey]) ? member[movesKey] : [];
+            var picker = $('<div>').addClass('mc-move-picker');
+            var trigger = renderMoveLabel(selected.move).addClass('mc-move');
+            if (moveList.length > 1) {
+                trigger.addClass('mc-move-trigger').attr('title', 'Choose a move to display');
+                trigger.append($('<span>').addClass('mc-move-caret').text(' \u25be'));
+                trigger.on('click', function(e){
+                    e.stopPropagation();
+                    var shouldOpen = !picker.hasClass('open');
+                    $('.mc-move-picker.open').removeClass('open').closest('tr').removeClass('move-picker-open');
+                    if (shouldOpen) picker.addClass('open').closest('tr').addClass('move-picker-open');
+                });
+                var menu = $('<div>').addClass('mc-move-menu');
+                moveList.forEach(function(move){
+                    var option = renderMoveLabel(move.move).addClass('mc-move-option');
+                    if (move.move === selected.move) option.addClass('selected');
+                    option.on('click', function(e){
+                        e.stopPropagation();
+                        member[selectedKey] = move.move;
+                        renderResults(window.__lastResults || []);
+                    });
+                    menu.append(option);
+                });
+                picker.append(menu);
+            }
+            return picker.append(trigger);
         }
         function renderEvs(evs) {
             var order = ['hp','at','df','sa','sd','sp'];
@@ -1228,24 +1295,26 @@
                     // "member → set" cell
                     var atkTd = $('<td>').addClass('dmg-you');
                     var atkWrap = $('<div>').addClass('matchup-cell');
-                    atkWrap.append($('<span>').addClass('mc-move').append(renderMoveLabel(m.attackerBestMove)));
-                    atkWrap.append($('<span>').addClass('mc-dmg').text(m.attackerBestMin + '-' + m.attackerBestMax + '%'));
+                    var attackerMove = selectedDamageMove(m, 'attacker');
+                    atkWrap.append(renderDamageMovePicker(m, 'attacker'));
+                    atkWrap.append($('<span>').addClass('mc-dmg').text(attackerMove.minPercent + '-' + attackerMove.maxPercent + '%'));
                     var spdSpan = $('<span>').addClass('mc-spd');
                     if (m.outspeeds) spdSpan.addClass('fast').text('\u25B2 FASTER');
                     else spdSpan.addClass('slow').text('\u25BC SLOWER');
                     atkWrap.append(spdSpan);
                     atkTd.append(atkWrap);
-                    if (m.attackerBestMin >= 100) atkTd.addClass('ohko');
-                    else if (m.attackerBestMax >= 100) atkTd.addClass('maybe-ohko');
+                    if (attackerMove.minPercent >= 100) atkTd.addClass('ohko');
+                    else if (attackerMove.maxPercent >= 100) atkTd.addClass('maybe-ohko');
                     tr.append(atkTd);
                     // "set → member" cell
                     var defTd = $('<td>').addClass('dmg-them');
                     var defWrap = $('<div>').addClass('matchup-cell');
-                    defWrap.append($('<span>').addClass('mc-move').append(renderMoveLabel(m.defenderBestMove)));
-                    defWrap.append($('<span>').addClass('mc-dmg').text(m.defenderBestMin + '-' + m.defenderBestMax + '%'));
+                    var defenderMove = selectedDamageMove(m, 'defender');
+                    defWrap.append(renderDamageMovePicker(m, 'defender'));
+                    defWrap.append($('<span>').addClass('mc-dmg').text(defenderMove.minPercent + '-' + defenderMove.maxPercent + '%'));
                     defTd.append(defWrap);
-                    if (m.defenderBestMin >= 100) defTd.addClass('ohko');
-                    else if (m.defenderBestMax >= 100) defTd.addClass('maybe-ohko');
+                    if (defenderMove.minPercent >= 100) defTd.addClass('ohko');
+                    else if (defenderMove.maxPercent >= 100) defTd.addClass('maybe-ohko');
                     tr.append(defTd);
                 }
                 tbody.append(tr);
@@ -1255,6 +1324,7 @@
 
         /* ==== init ==== */
         $(function(){
+            $(document).on('click', function(){ $('.mc-move-picker.open').removeClass('open').closest('tr').removeClass('move-picker-open'); });
             window.gameId = 3;
             if (typeof setGenProperties === 'function') setGenProperties();
 
