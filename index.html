@@ -292,6 +292,28 @@
     <div id="computed" class="statbox" style="display:none"></div>
 
     <div class="filter-bar">
+        <label>Facility:
+            <select id="facilityFilter">
+                <option value="tower" selected>Battle Tower</option>
+                <option value="dome">Battle Dome</option>
+                <option value="palace">Battle Palace</option>
+                <option value="arena">Battle Arena</option>
+                <option value="factory">Battle Factory</option>
+                <option value="pike">Battle Pike</option>
+                <option value="pyramid">Battle Pyramid</option>
+            </select>
+        </label>
+        <label>Battle:
+            <select id="battleMode">
+                <option value="singles" selected>Singles</option>
+            </select>
+        </label>
+        <label>Format:
+            <select id="levelFormat">
+                <option value="50" selected>Level 50</option>
+                <option value="open">Open Level</option>
+            </select>
+        </label>
         <label>Pool:
             <select id="poolFilter">
                 <option value="group1">Group 1</option>
@@ -315,8 +337,8 @@
         <label style="display:flex;align-items:center;gap:4px"><input id="oppReflect" type="checkbox">Opp Reflect</label>
         <label style="display:flex;align-items:center;gap:4px"><input id="oppLightScreen" type="checkbox">Opp L-Screen</label>
         <!-- Sort and Show controls removed per request -->
-        <label>Opp Level: <input id="oppLevel" type="number" value="50" min="1" style="width:70px"></label>
-        <label style="display:flex;align-items:center;gap:6px"><input id="oppAuto" type="checkbox" checked>Auto (use your level if &gt;50)</label>
+        <label>Open Opp Level: <input id="oppLevel" type="number" value="60" min="60" max="100" style="width:70px"></label>
+        <label style="display:flex;align-items:center;gap:6px"><input id="oppAuto" type="checkbox" checked>Auto (match your level, min 60)</label>
         <label>Search: <input id="nameFilter" type="text" placeholder="e.g. Tyranitar"></label>
         <span id="status"></span>
     </div>
@@ -352,6 +374,53 @@
 
         /* ==== cached option HTML (built once at init) ==== */
         var __speciesOpts = '', __moveOpts = '', __natureOpts = '', __itemOpts = '';
+
+        /* ==== Frontier challenge context ==== */
+        var FRONTIER_BRAIN_BY_FACILITY = {
+            tower: 'Anabel',
+            dome: 'Tucker',
+            palace: 'Spenser',
+            arena: 'Greta',
+            factory: 'Noland',
+            pike: 'Lucy',
+            pyramid: 'Brandon'
+        };
+        var FRONTIER_MODES_BY_FACILITY = {
+            tower: [['singles', 'Singles'], ['doubles', 'Doubles'], ['multi', 'Multi']],
+            dome: [['singles', 'Singles']],
+            palace: [['singles', 'Singles'], ['doubles', 'Doubles']],
+            arena: [['singles', 'Singles']],
+            factory: [['singles', 'Singles'], ['doubles', 'Doubles']],
+            pike: [['singles', 'Singles']],
+            pyramid: [['singles', 'Singles']]
+        };
+        var FRONTIER_BRAIN_PATTERN = /\b(Anabel|Tucker|Greta|Lucy|Brandon|Spenser|Noland)\s+(Silver|Gold)\b/i;
+
+        function updateBattleModeOptions() {
+            var facility = $('#facilityFilter').val() || 'tower';
+            var modes = FRONTIER_MODES_BY_FACILITY[facility] || FRONTIER_MODES_BY_FACILITY.tower;
+            var current = $('#battleMode').val();
+            var select = $('#battleMode').empty();
+            modes.forEach(function(mode) {
+                select.append($('<option>').val(mode[0]).text(mode[1]));
+            });
+            if (modes.some(function(mode){ return mode[0] === current; })) select.val(current);
+            else select.val(modes[0][0]);
+        }
+
+        function updateOpponentLevelControls() {
+            var isLevel50 = $('#levelFormat').val() === '50';
+            $('#oppAuto').prop('disabled', isLevel50);
+            $('#oppLevel').prop('disabled', isLevel50 || $('#oppAuto').is(':checked'));
+        }
+
+        function getOpponentLevel(team) {
+            if ($('#levelFormat').val() === '50') return 50;
+            var levels = (team || []).map(function(t){ return t.level || 50; });
+            var maxTeamLevel = levels.length ? Math.max.apply(null, levels) : 60;
+            if ($('#oppAuto').is(':checked')) return Math.max(60, maxTeamLevel);
+            return Math.max(60, Math.min(100, parseInt($('#oppLevel').val(), 10) || 60));
+        }
 
         /* ==== click-to-filter state ==== */
         var __clickFilters = { move: null, item: null, nature: null };
@@ -400,13 +469,7 @@
         function recalcRowWithAbility(r) {
             var team = window.__team;
             if (!team || !team.length) return;
-            var oppLevel = 50;
-            if ($('#oppAuto').is(':checked')) {
-                var maxLv = Math.max.apply(null, team.map(function(t){ return t.level||50; }));
-                oppLevel = Math.max(50, maxLv);
-            } else {
-                oppLevel = parseInt($('#oppLevel').val()) || 50;
-            }
+            var oppLevel = getOpponentLevel(team);
             var defInput = Object.assign({species: r.species, level: oppLevel}, r.set);
             if (r.__chosenAbility) defInput.ability = r.__chosenAbility;
             else {
@@ -1064,10 +1127,10 @@
 
         /* ==== Frontier Brain grouping sort ==== */
         function sortFrontierBrains(list) {
-            var brainOrder = ['Greta','Tucker','Lucy','Spenser','Brandon','Anabel'];
+            var brainOrder = ['Anabel','Tucker','Spenser','Greta','Noland','Lucy','Brandon'];
             var brainIdx = {}; brainOrder.forEach(function(n,i){ brainIdx[n] = i; });
             var tierOrder = { 'Silver': 0, 'Gold': 1 };
-            var brainPattern = /\b(Anabel|Tucker|Greta|Lucy|Brandon|Spenser)\s+(Silver|Gold)\b/i;
+            var brainPattern = FRONTIER_BRAIN_PATTERN;
             return list.slice().sort(function(a,b){
                 var ma = a.setName.match(brainPattern);
                 var mb = b.setName.match(brainPattern);
@@ -1086,22 +1149,31 @@
 
         function applyPoolFilter(list) {
             var pool = $('#poolFilter').val();
-            if (!pool || pool === 'all') return list;
+            var filtered = list;
             if (pool === 'frontier_brains') {
-                var brainPattern = /\b(Anabel|Tucker|Greta|Lucy|Brandon|Spenser)\s+(Silver|Gold)\b/i;
-                return list.filter(function(r){ return brainPattern.test(r.setName); });
+                filtered = list.filter(function(r){ return FRONTIER_BRAIN_PATTERN.test(r.setName); });
+            } else if (pool && pool !== 'all') {
+                var groups = {
+                    'group1': (typeof GROUP1 !== 'undefined') ? GROUP1 : null,
+                    'group2': (typeof GROUP2 !== 'undefined') ? GROUP2 : null,
+                    'group3': (typeof GROUP3 !== 'undefined') ? GROUP3 : null
+                };
+                var arr = groups[pool];
+                if (arr && Array.isArray(arr)) {
+                    var s = {}; arr.forEach(function(n){ s[n] = true; });
+                    filtered = list.filter(function(r){ return s[r.species]; });
+                }
             }
-            var groups = {
-                'group1': (typeof GROUP1 !== 'undefined') ? GROUP1 : null,
-                'group2': (typeof GROUP2 !== 'undefined') ? GROUP2 : null,
-                'group3': (typeof GROUP3 !== 'undefined') ? GROUP3 : null
-            };
-            var arr = groups[pool];
-            if (arr && Array.isArray(arr)) {
-                var s = {}; arr.forEach(function(n){ s[n] = true; });
-                return list.filter(function(r){ return s[r.species]; });
-            }
-            return list;
+
+            var selectedBrain = FRONTIER_BRAIN_BY_FACILITY[$('#facilityFilter').val()];
+            var singles = $('#battleMode').val() === 'singles';
+            var level50 = $('#levelFormat').val() === '50';
+            return filtered.filter(function(r) {
+                var brainMatch = r.setName.match(FRONTIER_BRAIN_PATTERN);
+                if (brainMatch && (!singles || brainMatch[1].toLowerCase() !== String(selectedBrain).toLowerCase())) return false;
+                if (level50 && r.set && String(r.set.tier || '').toLowerCase() === 'open') return false;
+                return true;
+            });
         }
         function applyNameFilter(list) {
             var q = $('#nameFilter').val().toLowerCase().trim();
@@ -1365,9 +1437,8 @@
                 renumberCards();
             });
 
-            // toggle oppLevel
-            $('#oppAuto').change(function(){ $('#oppLevel').prop('disabled', $(this).is(':checked')); });
-            $('#oppLevel').prop('disabled', $('#oppAuto').is(':checked'));
+            updateBattleModeOptions();
+            updateOpponentLevelControls();
 
             // calculate
             $('#calc').click(function(){
@@ -1377,11 +1448,7 @@
                     var teamInputs = buildTeamFromForm();
                     if (!teamInputs.length) { status.text('Add at least one Pokemon'); return; }
                     var limit = 2000;
-                    // determine opp level
-                    var maxLevel = Math.max.apply(null, teamInputs.map(function(t){ return t.level||50; }));
-                    var oppLevel;
-                    if ($('#oppAuto').is(':checked')) oppLevel = Math.max(50, maxLevel);
-                    else oppLevel = parseInt($('#oppLevel').val()) || 50;
+                    var oppLevel = getOpponentLevel(teamInputs);
 
                     // build team for display
                     var builtTeam = teamInputs.map(function(t){
@@ -1404,10 +1471,18 @@
                 }
             });
 
-            // re-render on filter/sort changes
-            $('#poolFilter,#nameFilter,#oppAuto,#oppLevel,#weatherSelect,#teamReflect,#teamLightScreen,#oppReflect,#oppLightScreen').on('change input', function(){
+            $('#facilityFilter').on('change', function(){
+                updateBattleModeOptions();
                 renderResults(window.__lastResults || []);
             });
+            $('#battleMode,#poolFilter,#nameFilter,#weatherSelect,#teamReflect,#teamLightScreen,#oppReflect,#oppLightScreen').on('change input', function(){
+                renderResults(window.__lastResults || []);
+            });
+            $('#levelFormat,#oppAuto').on('change', function(){
+                updateOpponentLevelControls();
+                $('#calc').click();
+            });
+            $('#oppLevel').on('change', function(){ $('#calc').click(); });
 
             // initial calc
             window.__teamSize = 1;
