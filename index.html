@@ -129,6 +129,13 @@
         }
         #results th:hover { background: #e0d4c3; }
         #results th .arrow { font-size: 8px; margin-left: 1px; }
+        .damage-move-filter, #nameFilter {
+            margin-left: 5px; max-width: 145px; font-family: inherit; font-size: 11px;
+            padding: 2px 4px; border: 1px solid var(--border); border-radius: 4px;
+            background: #fff; color: var(--ink);
+        }
+        .damage-move-filter { cursor: pointer; }
+        #nameFilter { width: 125px; }
         #results td {
             border: 1px solid var(--border);
             padding: 2px 3px;
@@ -339,14 +346,13 @@
         <!-- Sort and Show controls removed per request -->
         <label>Open Opp Level: <input id="oppLevel" type="number" value="60" min="60" max="100" style="width:70px"></label>
         <label style="display:flex;align-items:center;gap:6px"><input id="oppAuto" type="checkbox" checked>Auto (match your level, min 60)</label>
-        <label>Search: <input id="nameFilter" type="text" placeholder="e.g. Tyranitar"></label>
         <span id="status"></span>
     </div>
     <div id="activeFilters"></div>
 
     <div class="table-wrap">
         <table id="results">
-            <thead><tr></tr></thead>
+            <thead><tr><th>Set<input id="nameFilter" type="search" placeholder="e.g. Tyranitar" aria-label="Search Pokémon or sets"></th></tr></thead>
             <tbody></tbody>
         </table>
     </div>
@@ -556,29 +562,36 @@
             var type = (mvGlobal[moveName] && mvGlobal[moveName].type) ? mvGlobal[moveName].type.toLowerCase() : 'normal';
             return $('<span>').addClass('move-label type-' + type.replace(/[^a-z0-9]+/g,'')).text(moveName);
         }
-        function selectedDamageMove(member, direction) {
+        var damageDoneMoveFilters = [];
+        var damageTakenMoveFilter = '';
+        function columnDamageMove(direction, memberIndex) {
+            return direction === 'attacker' ? (damageDoneMoveFilters[memberIndex] || '') : damageTakenMoveFilter;
+        }
+        function selectedDamageMove(member, direction, memberIndex) {
             var movesKey = direction === 'attacker' ? 'attackerMoves' : 'defenderMoves';
             var selectedKey = direction === 'attacker' ? 'attackerSelectedMove' : 'defenderSelectedMove';
             var bestMoveKey = direction === 'attacker' ? 'attackerBestMove' : 'defenderBestMove';
             var moves = Array.isArray(member[movesKey]) ? member[movesKey] : [];
-            var selectedName = member[selectedKey] || member[bestMoveKey];
+            var columnMove = columnDamageMove(direction, memberIndex);
+            var selectedName = columnMove || member[selectedKey] || member[bestMoveKey];
             for (var i = 0; i < moves.length; i++) {
                 if (moves[i].move === selectedName) return moves[i];
             }
+            if (columnMove) return {move: columnMove, minPercent: null, maxPercent: null};
             return {
                 move: member[bestMoveKey] || '',
                 minPercent: direction === 'attacker' ? member.attackerBestMin : member.defenderBestMin,
                 maxPercent: direction === 'attacker' ? member.attackerBestMax : member.defenderBestMax
             };
         }
-        function renderDamageMovePicker(member, direction) {
+        function renderDamageMovePicker(member, direction, memberIndex) {
             var movesKey = direction === 'attacker' ? 'attackerMoves' : 'defenderMoves';
             var selectedKey = direction === 'attacker' ? 'attackerSelectedMove' : 'defenderSelectedMove';
-            var selected = selectedDamageMove(member, direction);
+            var selected = selectedDamageMove(member, direction, memberIndex);
             var moveList = Array.isArray(member[movesKey]) ? member[movesKey] : [];
             var picker = $('<div>').addClass('mc-move-picker');
             var trigger = renderMoveLabel(selected.move).addClass('mc-move');
-            if (moveList.length > 1) {
+            if (moveList.length > 1 && !columnDamageMove(direction, memberIndex)) {
                 trigger.addClass('mc-move-trigger').attr('title', 'Choose a move to display');
                 trigger.append($('<span>').addClass('mc-move-caret').text(' \u25be'));
                 trigger.on('click', function(e){
@@ -1196,8 +1209,10 @@
                         var pm = col.match(/^p(\d+)(atk|def)$/);
                         if (pm) {
                             var mi = parseInt(pm[1])-1;
-                            if (pm[2]==='atk') { va=(a.members[mi]?a.members[mi].attackerBestMax:0); vb=(b.members[mi]?b.members[mi].attackerBestMax:0); }
-                            else { va=(a.members[mi]?a.members[mi].defenderBestMax:0); vb=(b.members[mi]?b.members[mi].defenderBestMax:0); }
+                            var direction = pm[2] === 'atk' ? 'attacker' : 'defender';
+                            va = a.members[mi] ? selectedDamageMove(a.members[mi], direction, mi).maxPercent : null;
+                            vb = b.members[mi] ? selectedDamageMove(b.members[mi], direction, mi).maxPercent : null;
+                            if (va == null || vb == null) return va == null ? (vb == null ? 0 : 1) : -1;
                             return dir==='asc'? va-vb : vb-va;
                         }
                         va=a.score; vb=b.score; return dir==='asc'? va-vb : vb-va;
@@ -1208,12 +1223,53 @@
         }
 
         /* ==== build table headers ==== */
-        function buildHeaders(teamSize) {
+        function buildHeaders(teamSize, list) {
             var tr = $('#results thead tr');
+            var nameFilter = $('#nameFilter');
+            var searchFocused = document.activeElement === nameFilter[0];
+            var searchStart = nameFilter[0].selectionStart, searchEnd = nameFilter[0].selectionEnd;
+            var searchDirection = nameFilter[0].selectionDirection;
+            // Keep the search field and its handlers when rebuilding the headers.
+            nameFilter.detach();
             tr.empty();
             function th(col, txt) { return $('<th>').attr('data-col',col).html(txt+'<span class="arrow"></span>'); }
+            function damageHeader(col, txt, direction, memberIndex) {
+                var header = th(col, txt);
+                var names = {};
+                if (direction === 'attacker') {
+                    var teamMember = window.__team && window.__team[memberIndex];
+                    (teamMember ? teamMember.moves : []).forEach(function(move) {
+                        if (move.name && move.name !== '(No Move)') names[move.name] = true;
+                    });
+                    if (damageDoneMoveFilters[memberIndex] && !names[damageDoneMoveFilters[memberIndex]]) {
+                        damageDoneMoveFilters[memberIndex] = '';
+                    }
+                } else {
+                    list.forEach(function(row) {
+                        (row.set.moves || []).forEach(function(move) {
+                            if (move && move !== '(No Move)') names[move] = true;
+                        });
+                    });
+                }
+                var select = $('<select>').addClass('damage-move-filter')
+                    .attr('aria-label', direction === 'attacker' ? 'Damage done move for team member ' + (memberIndex + 1) : 'Damage taken move')
+                    .attr('title', direction === 'attacker' ? 'Show damage from this team member\'s move' : 'Show only sets with this move and its damage against every team member')
+                    .append($('<option>').val('').text('Strongest move'));
+                Object.keys(names).sort().forEach(function(name) {
+                    select.append($('<option>').val(name).text(name));
+                });
+                select.val(columnDamageMove(direction, memberIndex));
+                select.on('click keydown', function(e) { e.stopPropagation(); });
+                select.on('change', function(e) {
+                    e.stopPropagation();
+                    if (direction === 'attacker') damageDoneMoveFilters[memberIndex] = $(this).val();
+                    else damageTakenMoveFilter = $(this).val();
+                    renderResults(window.__lastResults || []);
+                });
+                return header.append(select);
+            }
             tr.append(th('species',''));
-            tr.append(th('set','Set'));
+            tr.append(th('set','Set').append(nameFilter));
             tr.append(th('item','Item'));
             tr.append(th('nature','Nat'));
             tr.append(th('ability','Ability'));
@@ -1231,8 +1287,8 @@
                         else lbl = sn.substring(0,6);
                     }
                 }
-                tr.append(th('p'+(i+1)+'atk', '<b>Dmg Done</b> ' + lbl + '\u2192'));
-                tr.append(th('p'+(i+1)+'def', '\u2192' + lbl + ' <b>Dmg Taken</b>'));
+                tr.append(damageHeader('p'+(i+1)+'atk', '<b>Dmg Done</b> ' + lbl + '\u2192', 'attacker', i));
+                tr.append(damageHeader('p'+(i+1)+'def', '\u2192' + lbl + ' <b>Dmg Taken</b>', 'defender', i));
             }
             // re-bind header clicks
             tr.find('th[data-col]').off('click').on('click', function(){
@@ -1242,6 +1298,10 @@
                 else { currentSortCol = col; currentSortDir = 'asc'; }
                 renderResults(window.__lastResults || []);
             });
+            if (searchFocused) {
+                nameFilter[0].focus();
+                nameFilter[0].setSelectionRange(searchStart, searchEnd, searchDirection);
+            }
         }
 
         /* ==== render results ==== */
@@ -1249,10 +1309,15 @@
             var tbody = $('#results tbody');
             tbody.empty();
             var teamSize = window.__teamSize || 1;
-            buildHeaders(teamSize);
+            buildHeaders(teamSize, list);
 
             var filtered = applyPoolFilter(list);
             filtered = applyNameFilter(filtered);
+            if (damageTakenMoveFilter) {
+                filtered = filtered.filter(function(row) {
+                    return (row.set.moves || []).indexOf(damageTakenMoveFilter) !== -1;
+                });
+            }
 
             // When Frontier Brains pool is selected, default sort groups by trainer (Silver then Gold)
             var pool = $('#poolFilter').val();
@@ -1367,9 +1432,9 @@
                     // "member → set" cell
                     var atkTd = $('<td>').addClass('dmg-you');
                     var atkWrap = $('<div>').addClass('matchup-cell');
-                    var attackerMove = selectedDamageMove(m, 'attacker');
-                    atkWrap.append(renderDamageMovePicker(m, 'attacker'));
-                    atkWrap.append($('<span>').addClass('mc-dmg').text(attackerMove.minPercent + '-' + attackerMove.maxPercent + '%'));
+                    var attackerMove = selectedDamageMove(m, 'attacker', mi);
+                    atkWrap.append(renderDamageMovePicker(m, 'attacker', mi));
+                    atkWrap.append($('<span>').addClass('mc-dmg').text(attackerMove.maxPercent == null ? '-' : attackerMove.minPercent + '-' + attackerMove.maxPercent + '%'));
                     var spdSpan = $('<span>').addClass('mc-spd');
                     if (m.outspeeds) spdSpan.addClass('fast').text('\u25B2 FASTER');
                     else spdSpan.addClass('slow').text('\u25BC SLOWER');
@@ -1381,9 +1446,9 @@
                     // "set → member" cell
                     var defTd = $('<td>').addClass('dmg-them');
                     var defWrap = $('<div>').addClass('matchup-cell');
-                    var defenderMove = selectedDamageMove(m, 'defender');
-                    defWrap.append(renderDamageMovePicker(m, 'defender'));
-                    defWrap.append($('<span>').addClass('mc-dmg').text(defenderMove.minPercent + '-' + defenderMove.maxPercent + '%'));
+                    var defenderMove = selectedDamageMove(m, 'defender', mi);
+                    defWrap.append(renderDamageMovePicker(m, 'defender', mi));
+                    defWrap.append($('<span>').addClass('mc-dmg').text(defenderMove.maxPercent == null ? '-' : defenderMove.minPercent + '-' + defenderMove.maxPercent + '%'));
                     defTd.append(defWrap);
                     if (defenderMove.minPercent >= 100) defTd.addClass('ohko');
                     else if (defenderMove.maxPercent >= 100) defTd.addClass('maybe-ohko');
@@ -1475,6 +1540,7 @@
                 updateBattleModeOptions();
                 renderResults(window.__lastResults || []);
             });
+            $('#nameFilter').on('click keydown', function(e){ e.stopPropagation(); });
             $('#battleMode,#poolFilter,#nameFilter,#weatherSelect,#teamReflect,#teamLightScreen,#oppReflect,#oppLightScreen').on('change input', function(){
                 renderResults(window.__lastResults || []);
             });
